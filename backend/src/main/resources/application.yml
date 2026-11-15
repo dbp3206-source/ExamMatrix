@@ -2,9 +2,9 @@ spring.application.name: backend
 
 spring:
   datasource:
-    url: ${DB_URL}
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/exam_matrix}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -16,9 +16,9 @@ spring:
         format_sql: true
 
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
 
 app:
   jwt:
-    secret: ${JWT_SECRET}
+    secret: ${JWT_SECRET:c29tZS1zZWN1cmUtand0LXNlY3JldC1leGFtLW1hdHJpeC0yMDI2LWRlZXBtaW5k}
     expiration-minutes: 120

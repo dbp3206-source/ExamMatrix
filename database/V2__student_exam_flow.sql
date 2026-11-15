@@ -37,6 +37,11 @@ WHERE NOT EXISTS (
 ALTER TABLE questions
     ADD COLUMN IF NOT EXISTS reference_answer TEXT;
 
+-- Ensure answers table has audit timestamps
+ALTER TABLE answers
+    ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+
 -- A matrix is either objective or essay; it must not mix both kinds.
 ALTER TABLE exam_matrices
     ADD COLUMN IF NOT EXISTS exam_type VARCHAR(20);

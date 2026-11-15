@@ -1,0 +1,65 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: exammatrix-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: exam_matrix
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d exam_matrix"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - exammatrix-net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: exammatrix-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/exam_matrix
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      JWT_SECRET: c29tZS1zZWN1cmUtand0LXNlY3JldC1leGFtLW1hdHJpeC0yMDI2LWRlZXBtaW5k
+      SERVER_PORT: 8080
+    ports:
+      - "8080:8080"
+    networks:
+      - exammatrix-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ""
+        VITE_USE_MOCK_API: "false"
+    container_name: exammatrix-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+    networks:
+      - exammatrix-net
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  exammatrix-net:
+    driver: bridge

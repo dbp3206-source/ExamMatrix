@@ -35,9 +35,54 @@ psql -U <db_user> -d <db_name> -f database/V3__student_exam_access_and_import.sq
 
 ---
 
-## 3. Cài đặt và Khởi chạy
+## 3. Triển khai với Docker & Docker Compose (Khuyến nghị)
 
-### 3.1. Backend
+Toàn bộ hệ thống (PostgreSQL, Backend Spring Boot, Frontend Nginx) đã được container hóa hoàn chỉnh. Cơ chế tự động chạy các migration script (`V1` -> `V2` -> `V3` -> `V4`) thông qua volume `/docker-entrypoint-initdb.d/` của PostgreSQL container khi khởi động lần đầu.
+
+### 3.1. Khởi chạy toàn bộ hệ thống
+
+Chỉ cần một lệnh duy nhất tại thư mục gốc của dự án:
+
+```bash
+docker compose up -d --build
+```
+
+Lệnh này sẽ tự động:
+1. Khởi tạo container PostgreSQL 16 Alpine, tạo cơ sở dữ liệu `exam_matrix` và tự động nạp các script schema (`V1`, `V2`, `V3`) cùng dữ liệu mẫu ban đầu (`V4__seed_data.sql`).
+2. Build backend đa tầng (multi-stage build) trên nền Java 21 Temurin Alpine, chạy ứng dụng dưới quyền non-root user `appuser` tại cổng 8080.
+3. Build frontend với Vite & pnpm, đóng gói vào Nginx Alpine phục vụ tĩnh kèm cấu hình reverse proxy chuyển tiếp các API `/auth/`, `/student/`, `/teacher/`, `/dashboard/`, `/questions/`, `/matrices/`, `/exam-papers/` về backend tại cổng 3000.
+
+### 3.2. Truy cập ứng dụng & Tài khoản mẫu
+
+- **Giao diện người dùng (Frontend Web)**: [http://localhost:3000](http://localhost:3000)
+- **Backend API trực tiếp**: [http://localhost:8080](http://localhost:8080)
+
+**Tài khoản mẫu được nạp sẵn (`V4__seed_data.sql`):**
+- **Quản trị viên (Admin)**: `admin` / `admin123`
+- **Giáo viên (Teacher)**: `teacher` / `teacher123` (Đã có sẵn lớp học mẫu mã `TOAN12A` - mật khẩu lớp: `123`)
+- **Sinh viên (Student)**: `student` / `student123`
+
+### 3.3. Quản lý container
+
+```bash
+# Xem trạng thái các container
+docker compose ps
+
+# Xem log thời gian thực
+docker compose logs -f
+
+# Dừng toàn bộ hệ thống
+docker compose down
+
+# Dừng và xóa toàn bộ dữ liệu volume nếu muốn khởi tạo lại từ đầu
+docker compose down -v
+```
+
+---
+
+## 4. Cài đặt và Khởi chạy thủ công (Manual Setup)
+
+### 4.1. Backend
 
 Yêu cầu: JDK 21.
 
@@ -53,7 +98,7 @@ cd backend
 
 Backend chạy mặc định tại cổng `http://localhost:8080`.
 
-### 3.2. Frontend
+### 4.2. Frontend
 
 Yêu cầu: Node.js 18+ và `pnpm`.
 
@@ -77,9 +122,9 @@ Frontend chạy mặc định tại `http://localhost:5173`. Có thể chuyển 
 
 ---
 
-## 4. Module Sinh viên Làm bài thi & Phân quyền
+## 5. Module Sinh viên Làm bài thi & Phân quyền
 
-### 4.1. Đăng ký & Đăng nhập Sinh viên
+### 5.1. Đăng ký & Đăng nhập Sinh viên
 - Sinh viên đăng ký tài khoản qua endpoint `POST /auth/register/student` hoặc trên giao diện đăng ký sinh viên (`/dang-ky-sinh-vien`).
 - Đăng nhập qua JWT token chuẩn.
 - Phân quyền nghiêm ngặt:
@@ -87,13 +132,13 @@ Frontend chạy mặc định tại `http://localhost:5173`. Có thể chuyển 
   - Sinh viên bị chặn (403 Forbidden) khi cố truy cập ngân hàng câu hỏi, ma trận đề, sinh đề thi hoặc quản trị.
   - Giáo viên và Admin bị chặn khi vào màn hình làm bài của sinh viên.
 
-### 4.2. Lớp Giáo viên & Đề PUBLIC / PRIVATE
+### 5.2. Lớp Giáo viên & Đề PUBLIC / PRIVATE
 - Mỗi giáo viên sở hữu lớp/phòng thi riêng với mã lớp và mật khẩu lớp học (mật khẩu được băm an toàn bằng BCrypt/PasswordEncoder).
 - **Đề PUBLIC (Công khai)**: Bất kỳ sinh viên nào đã đăng nhập đều có thể xem và bắt đầu làm bài trực tiếp mà không cần tham gia lớp.
 - **Đề PRIVATE (Lớp học)**: Yêu cầu sinh viên phải nhập đúng mật khẩu tham gia lớp của giáo viên sở hữu đề trước khi được xem hoặc làm bài. Backend kiểm tra quyền ở mọi endpoint; không dựa vào frontend.
 - Giáo viên có thể duyệt, từ chối hoặc thu hồi quyền (`REVOKED`) của sinh viên trong lớp.
 
-### 4.3. Lượt làm bài thi & Chấm điểm
+### 5.3. Lượt làm bài thi & Chấm điểm
 - Mỗi sinh viên chỉ có tối đa 1 lượt làm trên mỗi đề thi.
 - Bộ đếm thời gian tính chính xác dựa vào thời điểm `startedAt` do server ghi nhận (không phụ thuộc timer frontend).
 - Hỗ trợ đầy đủ: một đáp án (`SINGLE_CHOICE`), nhiều đáp án (`MULTIPLE_CHOICE`), đúng/sai (`TRUE_FALSE`), tự luận (`ESSAY`).
@@ -105,7 +150,7 @@ Frontend chạy mặc định tại `http://localhost:5173`. Có thể chuyển 
 
 ---
 
-## 5. Nhập câu hỏi từ tài liệu & Giới hạn công nghệ
+## 6. Nhập câu hỏi từ tài liệu & Giới hạn công nghệ
 
 - **Hỗ trợ Word (`.docx`) và PDF (`.pdf`)**: Phân tích cú pháp nội bộ bằng Apache POI và Apache PDFBox độc lập, chạy offline, bảo đảm an toàn dữ liệu học liệu.
 - **Giới hạn về nhận diện từ hình ảnh (Image OCR)**:
