@@ -31,6 +31,11 @@ public class ExamMatrix {
     @JoinColumn(name = "subject_id", nullable = false)
     private Subject subject;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "exam_type", length = 20, nullable = false)
+    @Builder.Default
+    private ExamType examType = ExamType.OBJECTIVE;
+
     @Column(name = "title", length = 100, nullable = false)
     private String title;
 
@@ -40,19 +45,13 @@ public class ExamMatrix {
     @Column(name = "total_questions", nullable = false)
     private Integer totalQuestions;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "exam_type", length = 20, nullable = false)
-    @Builder.Default
-    private ExamType examType = ExamType.OBJECTIVE;
-
     @Builder.Default
     @OneToMany(
             mappedBy = "examMatrix",
             cascade = CascadeType.ALL,
             orphanRemoval = true
     )
-    private List<ExamMatrixConfig> configs =
-            new ArrayList<>();
+    private List<ExamMatrixConfig> configs = new ArrayList<>();
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

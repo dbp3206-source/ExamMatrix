@@ -7,6 +7,7 @@ import com.exammatrix.backend.dto.response.PageResponse;
 import com.exammatrix.backend.dto.response.QuestionAvailabilityResponse;
 import com.exammatrix.backend.dto.response.QuestionResponse;
 import com.exammatrix.backend.entity.enums.Difficulty;
+import com.exammatrix.backend.entity.enums.ExamType;
 import com.exammatrix.backend.entity.enums.QuestionType;
 import com.exammatrix.backend.service.QuestionImportService;
 import com.exammatrix.backend.service.QuestionService;
@@ -38,8 +39,9 @@ public class QuestionController {
             @RequestParam
             @Min(value = 1, message = "ID môn học không hợp lệ")
             Integer subjectId,
-            @RequestParam(required = false)
-            String examType
+
+            @RequestParam(defaultValue = "OBJECTIVE")
+            ExamType examType
     ) {
         return ResponseEntity.ok(questionService.getAvailability(subjectId, examType));
     }

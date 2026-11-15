@@ -9,7 +9,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     show-sql: true
     properties:
       hibernate:
@@ -20,5 +20,5 @@ server:
 
 app:
   jwt:
-    secret: ${JWT_SECRET:c29tZS1zZWN1cmUtand0LXNlY3JldC1leGFtLW1hdHJpeC0yMDI2LWRlZXBtaW5k}
+    secret: ${JWT_SECRET:your-256-bit-secret-key-for-jwt-signing-1234567890}
     expiration-minutes: 120

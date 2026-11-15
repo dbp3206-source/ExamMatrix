@@ -1,6 +1,7 @@
 package com.exammatrix.backend.entity;
 
 import com.exammatrix.backend.entity.enums.Difficulty;
+import com.exammatrix.backend.entity.enums.ExamType;
 import com.exammatrix.backend.entity.enums.QuestionType;
 import jakarta.persistence.*;
 import lombok.*;
@@ -32,6 +33,11 @@ public class Question {
     @Column(name = "type", length = 20, nullable = false)
     private QuestionType type;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "exam_type", nullable = false)
+    @Builder.Default
+    private ExamType examType = ExamType.OBJECTIVE;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "chapter_id", nullable = false)
     private Chapter chapter;
@@ -57,6 +63,16 @@ public class Question {
     @UpdateTimestamp
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @PrePersist
+    @PreUpdate
+    public void syncExamType() {
+        if (this.type == QuestionType.ESSAY) {
+            this.examType = ExamType.ESSAY;
+        } else if (this.examType == null) {
+            this.examType = ExamType.OBJECTIVE;
+        }
+    }
 
     public void addAnswer(Answer answer) {
         answers.add(answer);

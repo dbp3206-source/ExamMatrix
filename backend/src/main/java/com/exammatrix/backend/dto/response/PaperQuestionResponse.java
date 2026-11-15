@@ -18,7 +18,26 @@ public class PaperQuestionResponse {
     private String content;
     private QuestionType type;
     private Difficulty difficulty;
-    private BigDecimal points;
-    private String referenceAnswer;
     private List<AnswerResponse> answers;
+    private String referenceAnswer;
+    private BigDecimal points;
+
+    public PaperQuestionResponse(
+            UUID id,
+            Integer questionOrder,
+            String content,
+            QuestionType type,
+            Difficulty difficulty,
+            List<AnswerResponse> answers,
+            String referenceAnswer
+    ) {
+        this.id = id;
+        this.questionOrder = questionOrder;
+        this.content = content;
+        this.type = type;
+        this.difficulty = difficulty;
+        this.answers = answers;
+        this.referenceAnswer = referenceAnswer;
+        this.points = null;
+    }
 }

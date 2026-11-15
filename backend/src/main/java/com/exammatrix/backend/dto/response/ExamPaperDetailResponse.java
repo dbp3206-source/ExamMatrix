@@ -19,4 +19,14 @@ public class ExamPaperDetailResponse {
     private Boolean isPublished;
     private LocalDateTime createdAt;
     private List<PaperQuestionResponse> questions;
+
+    public ExamPaperDetailResponse(
+            UUID id,
+            UUID matrixId,
+            String examCode,
+            LocalDateTime createdAt,
+            List<PaperQuestionResponse> questions
+    ) {
+        this(id, matrixId, examCode, ExamAccessType.PUBLIC, true, createdAt, questions);
+    }
 }

@@ -5,6 +5,7 @@ import com.exammatrix.backend.dto.request.UpdateExamPaperAccessRequest;
 import com.exammatrix.backend.dto.response.*;
 import com.exammatrix.backend.entity.*;
 import com.exammatrix.backend.entity.enums.ExamType;
+import com.exammatrix.backend.entity.enums.QuestionType;
 import com.exammatrix.backend.repository.ExamMatrixRepository;
 import com.exammatrix.backend.repository.ExamPaperRepository;
 import com.exammatrix.backend.repository.QuestionRepository;
@@ -297,17 +298,24 @@ public class ExamPaperServiceImpl implements ExamPaperService {
 
         for (PaperQuestion paperQuestion : sortedQuestions) {
             Question question = paperQuestion.getQuestion();
+            boolean isEssay = question.getType() == com.exammatrix.backend.entity.enums.QuestionType.ESSAY;
 
             List<AnswerResponse> answerResponses = new ArrayList<>();
+            String referenceAnswer = null;
 
-            for (Answer answer : question.getAnswers()) {
-                answerResponses.add(new AnswerResponse(
-                            answer.getId(),
-                            answer.getContent(),
-                            answer.getIsCorrect()
-                    )
-                );
+            if (isEssay) {
+                referenceAnswer = question.getReferenceAnswer();
+            } else {
+                for (Answer answer : question.getAnswers()) {
+                    answerResponses.add(new AnswerResponse(
+                                answer.getId(),
+                                answer.getContent(),
+                                answer.getIsCorrect()
+                        )
+                    );
+                }
             }
+
 
             questionResponses.add(new PaperQuestionResponse(
                         question.getId(),
@@ -315,9 +323,9 @@ public class ExamPaperServiceImpl implements ExamPaperService {
                         question.getContent(),
                         question.getType(),
                         question.getDifficulty(),
-                        paperQuestion.getPoints(),
-                        question.getReferenceAnswer(),
-                        answerResponses
+                        answerResponses,
+                        referenceAnswer,
+                        paperQuestion.getPoints()
                 )
             );
         }
