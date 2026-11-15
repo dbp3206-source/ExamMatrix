@@ -1,5 +1,6 @@
 package com.exammatrix.backend.entity;
 
+import com.exammatrix.backend.entity.enums.ExamAccessType;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -27,6 +28,15 @@ public class ExamPaper {
 
     @Column(name = "exam_code", length = 10, nullable = false)
     private String examCode;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "access_type", length = 20, nullable = false)
+    @Builder.Default
+    private ExamAccessType accessType = ExamAccessType.PUBLIC;
+
+    @Column(name = "is_published", nullable = false)
+    @Builder.Default
+    private Boolean isPublished = true;
 
     @Builder.Default
     @OneToMany(

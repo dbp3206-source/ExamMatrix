@@ -1,6 +1,7 @@
 package com.exammatrix.backend.service;
 
 import com.exammatrix.backend.dto.request.GenerateExamPapersRequest;
+import com.exammatrix.backend.dto.request.UpdateExamPaperAccessRequest;
 import com.exammatrix.backend.dto.response.ExamPaperDetailResponse;
 import com.exammatrix.backend.dto.response.PageResponse;
 
@@ -18,6 +19,8 @@ public interface ExamPaperService {
     ExamPaperDetailResponse getExamPaperById(UUID id);
 
     List<ExamPaperDetailResponse> generateExamPapers(UUID matrixId, GenerateExamPapersRequest request);
+
+    ExamPaperDetailResponse updateExamPaperAccess(UUID id, UpdateExamPaperAccessRequest request);
 
     void deleteExamPaper(UUID id);
 }

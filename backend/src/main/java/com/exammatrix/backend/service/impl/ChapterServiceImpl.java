@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
@@ -19,6 +20,7 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class ChapterServiceImpl implements ChapterService {
     private final SubjectRepository subjectRepository;
     private final ChapterRepository chapterRepository;
@@ -53,6 +55,7 @@ public class ChapterServiceImpl implements ChapterService {
     }
 
     @Override
+    @Transactional
     public ChapterResponse createNewChapter(ChapterRequest request) {
         Chapter chapter = new Chapter();
 
@@ -80,6 +83,7 @@ public class ChapterServiceImpl implements ChapterService {
     }
 
     @Override
+    @Transactional
     public ChapterResponse updateChapterById(Integer id, ChapterRequest request) {
         Chapter chapter = findChapterById(id);
 
@@ -108,6 +112,7 @@ public class ChapterServiceImpl implements ChapterService {
     }
 
     @Override
+    @Transactional
     public void deleteChapterById(Integer id) {
         Chapter chapter = findChapterById(id);
 

@@ -25,6 +25,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
@@ -36,6 +37,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class QuestionServiceImpl implements QuestionService {
     private final QuestionRepository questionRepository;
     private final ChapterRepository chapterRepository;
@@ -101,6 +103,7 @@ public class QuestionServiceImpl implements QuestionService {
     }
 
     @Override
+    @Transactional
     public QuestionResponse createQuestion(QuestionRequest request) {
         User currentUser = currentUserService.getCurrentUser();
 
@@ -116,7 +119,12 @@ public class QuestionServiceImpl implements QuestionService {
         question.setDifficulty(request.getDifficulty());
         question.setType(request.getType());
 
-        addAnswersToQuestion(question, request.getAnswers());
+        if (request.getType() == QuestionType.ESSAY) {
+            question.setReferenceAnswer(request.getReferenceAnswer().trim());
+        } else {
+            question.setReferenceAnswer(null);
+            addAnswersToQuestion(question, request.getAnswers());
+        }
 
         Question savedQuestion = questionRepository.save(question);
 
@@ -124,6 +132,7 @@ public class QuestionServiceImpl implements QuestionService {
     }
 
     @Override
+    @Transactional
     public QuestionResponse updateQuestion(UUID id, QuestionRequest request) {
         User currentUser = currentUserService.getCurrentUser();
 
@@ -142,7 +151,12 @@ public class QuestionServiceImpl implements QuestionService {
 
         question.getAnswers().clear();
 
-        addAnswersToQuestion(question, request.getAnswers());
+        if (request.getType() == QuestionType.ESSAY) {
+            question.setReferenceAnswer(request.getReferenceAnswer().trim());
+        } else {
+            question.setReferenceAnswer(null);
+            addAnswersToQuestion(question, request.getAnswers());
+        }
 
         Question savedQuestion = questionRepository.save(question);
 
@@ -150,6 +164,7 @@ public class QuestionServiceImpl implements QuestionService {
     }
 
     @Override
+    @Transactional
     public void deleteQuestion(UUID id) {
         User currentUser = currentUserService.getCurrentUser();
 
@@ -171,6 +186,11 @@ public class QuestionServiceImpl implements QuestionService {
 
     @Override
     public List<QuestionAvailabilityResponse> getAvailability(Integer subjectId) {
+        return getAvailability(subjectId, "OBJECTIVE");
+    }
+
+    @Override
+    public List<QuestionAvailabilityResponse> getAvailability(Integer subjectId, String examType) {
         currentUserService.getCurrentUser();
 
         if (subjectId == null || subjectId < 1) {
@@ -187,15 +207,17 @@ public class QuestionServiceImpl implements QuestionService {
             );
         }
 
+        boolean isEssay = "ESSAY".equalsIgnoreCase(examType);
         List<Chapter> chapters = chapterRepository.findAllBySubjectIdOrderByOrderIndexAsc(subjectId);
 
         List<QuestionAvailabilityResponse> responses = new ArrayList<>();
 
         for (Chapter chapter : chapters) {
             for (Difficulty difficulty : Difficulty.values()) {
-                long available = questionRepository.countByChapter_IdAndDifficulty(
+                long available = questionRepository.countByChapterAndDifficultyAndIsEssay(
                         chapter.getId(),
-                        difficulty
+                        difficulty,
+                        isEssay
                 );
 
                 responses.add(new QuestionAvailabilityResponse(
@@ -211,18 +233,33 @@ public class QuestionServiceImpl implements QuestionService {
     }
 
     private void validateQuestionRequest(QuestionRequest request) {
-        if (request.getAnswers() == null || request.getAnswers().size() < 2) {
-
-            throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST,
-                "Câu hỏi phải có ít nhất 2 đáp án"
-            );
-        }
-
         if (request.getType() == null) {
             throw new ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
                 "Loại câu hỏi không hợp lệ"
+            );
+        }
+
+        if (request.getType() == QuestionType.ESSAY) {
+            if (request.getReferenceAnswer() == null || request.getReferenceAnswer().isBlank()) {
+                throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Câu hỏi tự luận bắt buộc phải có đáp án tham khảo"
+                );
+            }
+            if (request.getAnswers() != null && !request.getAnswers().isEmpty()) {
+                throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Câu hỏi tự luận không được có danh sách đáp án"
+                );
+            }
+            return;
+        }
+
+        if (request.getAnswers() == null || request.getAnswers().size() < 2) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Câu hỏi phải có ít nhất 2 đáp án"
             );
         }
 
@@ -254,6 +291,7 @@ public class QuestionServiceImpl implements QuestionService {
                 request.getAnswers(),
                 correctAnswerCount
             );
+            case ESSAY -> {}
         }
     }
 
@@ -374,6 +412,7 @@ public class QuestionServiceImpl implements QuestionService {
             question.getTeacher().getId(),
             question.getDifficulty(),
             question.getType(),
+            question.getReferenceAnswer(),
             answerResponses,
             question.getCreatedAt()
         );

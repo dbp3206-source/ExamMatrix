@@ -19,6 +19,13 @@ export const seedData = {
     { id: 'u-admin', username: 'admin', password: 'admin123', email: 'admin@exammatrix.vn', fullName: 'Quản trị hệ thống', role: 'ADMIN', status: 'ACTIVE', createdAt: now },
     { id: 'u-teacher', username: 'teacher', password: 'teacher123', email: 'teacher@exammatrix.vn', fullName: 'Nguyễn Minh Anh', role: 'TEACHER', status: 'ACTIVE', createdAt: now },
     { id: 'u-teacher-2', username: 'lan.pham', password: 'teacher123', email: 'lan.pham@exammatrix.vn', fullName: 'Phạm Thu Lan', role: 'TEACHER', status: 'LOCKED', createdAt: now },
+    { id: 'u-student', username: 'student', password: 'student123', email: 'student@exammatrix.vn', fullName: 'Trần Văn Nam', role: 'STUDENT', status: 'ACTIVE', createdAt: now },
+  ],
+  classes: [
+    { id: 'c-1', teacherId: 'u-teacher', name: 'Lớp Toán Thầy Minh Anh', classCode: 'TOAN12A', joinPassword: '123', createdAt: now },
+  ],
+  assignments: [
+    { id: 'as-1', studentId: 'u-student', teacherId: 'u-teacher', classId: 'c-1', status: 'APPROVED', requestedAt: now, reviewedAt: now, decisionNote: 'Đã duyệt tham gia' },
   ],
   questions: [
     { id: 'q-1', chapterId: 1, teacherId: 'u-teacher', content: 'Hàm số y = x² đồng biến trên khoảng nào?', difficulty: 'EASY', type: 'SINGLE_CHOICE', answers: [{ id: 'a-1', content: '(0; +∞)', isCorrect: true }, { id: 'a-2', content: '(-∞; 0)', isCorrect: false }, { id: 'a-3', content: 'R', isCorrect: false }], createdAt: now },
@@ -42,5 +49,33 @@ export const seedData = {
     { id: 'm-1', teacherId: 'u-teacher', subjectId: 1, examType: 'OBJECTIVE', title: 'Kiểm tra giữa kỳ Toán 12', duration: 45, totalQuestions: 3, configs: [{ chapterId: 1, difficulty: 'EASY', quantity: 2 }, { chapterId: 1, difficulty: 'MEDIUM', quantity: 1 }], createdAt: now, updatedAt: now },
     { id: 'm-essay-1', teacherId: 'u-teacher', subjectId: 1, examType: 'ESSAY', title: 'Đề tự luận ôn tập Toán 12', duration: 90, totalQuestions: 3, configs: [{ chapterId: 1, difficulty: 'MEDIUM', quantity: 1 }, { chapterId: 2, difficulty: 'MEDIUM', quantity: 1 }, { chapterId: 3, difficulty: 'EASY', quantity: 1 }], createdAt: now, updatedAt: now },
   ],
-  papers: [],
+  papers: [
+    {
+      id: 'p-public-1',
+      matrixId: 'm-1',
+      examCode: 'M01',
+      accessType: 'PUBLIC',
+      isPublished: true,
+      createdAt: now,
+      questions: [
+        { id: 'q-1', questionOrder: 1, content: 'Hàm số y = x² đồng biến trên khoảng nào?', type: 'SINGLE_CHOICE', difficulty: 'EASY', points: 3.33, answers: [{ id: 'a-1', content: '(0; +∞)', isCorrect: true }, { id: 'a-2', content: '(-∞; 0)', isCorrect: false }, { id: 'a-3', content: 'R', isCorrect: false }] },
+        { id: 'q-2', questionOrder: 2, content: 'Đạo hàm của hàm số y = x³ - 3x là biểu thức nào?', type: 'SINGLE_CHOICE', difficulty: 'MEDIUM', points: 3.33, answers: [{ id: 'a-4', content: '3x² - 3', isCorrect: true }, { id: 'a-5', content: 'x² - 3', isCorrect: false }, { id: 'a-6', content: '3x²', isCorrect: false }] },
+        { id: 'q-3', questionOrder: 3, content: 'Một hàm số có thể có nhiều điểm cực trị.', type: 'TRUE_FALSE', difficulty: 'EASY', points: 3.34, answers: [{ id: 'a-7', content: 'Đúng', isCorrect: true }, { id: 'a-8', content: 'Sai', isCorrect: false }] },
+      ],
+    },
+    {
+      id: 'p-private-1',
+      matrixId: 'm-essay-1',
+      examCode: 'M02',
+      accessType: 'PRIVATE',
+      isPublished: true,
+      createdAt: now,
+      questions: [
+        { id: 'q-essay-1', questionOrder: 1, content: 'Khảo sát sự biến thiên và vẽ đồ thị của hàm số y = x³ - 3x + 1.', type: 'ESSAY', difficulty: 'MEDIUM', points: 4.0, answers: [], referenceAnswer: 'Tính đạo hàm y’ = 3x² - 3.\nTìm các điểm tới hạn x = -1 và x = 1.\nLập bảng biến thiên, xác định cực trị và vẽ đồ thị qua các điểm đặc trưng.' },
+        { id: 'q-essay-3', questionOrder: 2, content: 'Giải phương trình 3^(2x) - 10·3^x + 9 = 0.', type: 'ESSAY', difficulty: 'MEDIUM', points: 3.0, answers: [], referenceAnswer: 'Đặt t = 3^x, điều kiện t > 0.\nPhương trình trở thành t² - 10t + 9 = 0, suy ra t = 1 hoặc t = 9.\nVậy x = 0 hoặc x = 2.' },
+        { id: 'q-essay-4', questionOrder: 3, content: 'Tính diện tích hình phẳng giới hạn bởi đồ thị y = x², trục hoành và hai đường thẳng x = 0, x = 1.', type: 'ESSAY', difficulty: 'EASY', points: 3.0, answers: [], referenceAnswer: 'Diện tích cần tìm là S = ∫₀¹ x² dx.\nTa có S = [x³/3]₀¹ = 1/3 (đơn vị diện tích).' },
+      ],
+    },
+  ],
+  attempts: [],
 }

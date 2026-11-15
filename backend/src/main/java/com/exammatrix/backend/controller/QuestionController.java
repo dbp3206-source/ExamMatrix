@@ -1,19 +1,24 @@
 package com.exammatrix.backend.controller;
 
+import com.exammatrix.backend.dto.request.ImportQuestionsConfirmRequest;
 import com.exammatrix.backend.dto.request.QuestionRequest;
+import com.exammatrix.backend.dto.response.ImportQuestionsPreviewResponse;
 import com.exammatrix.backend.dto.response.PageResponse;
 import com.exammatrix.backend.dto.response.QuestionAvailabilityResponse;
 import com.exammatrix.backend.dto.response.QuestionResponse;
 import com.exammatrix.backend.entity.enums.Difficulty;
 import com.exammatrix.backend.entity.enums.QuestionType;
+import com.exammatrix.backend.service.QuestionImportService;
 import com.exammatrix.backend.service.QuestionService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -25,15 +30,35 @@ import java.util.UUID;
 public class QuestionController {
 
     private final QuestionService questionService;
+    private final QuestionImportService questionImportService;
 
     @GetMapping("/availability")
     public ResponseEntity<List<QuestionAvailabilityResponse>>
     getAvailability(
             @RequestParam
             @Min(value = 1, message = "ID môn học không hợp lệ")
-            Integer subjectId
+            Integer subjectId,
+            @RequestParam(required = false)
+            String examType
     ) {
-        return ResponseEntity.ok(questionService.getAvailability(subjectId));
+        return ResponseEntity.ok(questionService.getAvailability(subjectId, examType));
+    }
+
+    @PostMapping(value = "/import/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ImportQuestionsPreviewResponse> previewImport(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "subjectId", required = false) Integer subjectId,
+            @RequestParam(value = "chapterId", required = false) Integer chapterId
+    ) {
+        return ResponseEntity.ok(questionImportService.previewImport(file, subjectId, chapterId));
+    }
+
+    @PostMapping("/import/confirm")
+    public ResponseEntity<List<QuestionResponse>> confirmImport(
+            @Valid @RequestBody ImportQuestionsConfirmRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(questionImportService.confirmImport(request));
     }
 
     @GetMapping

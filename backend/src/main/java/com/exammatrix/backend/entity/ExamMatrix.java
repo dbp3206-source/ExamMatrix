@@ -1,5 +1,6 @@
 package com.exammatrix.backend.entity;
 
+import com.exammatrix.backend.entity.enums.ExamType;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -38,6 +39,11 @@ public class ExamMatrix {
 
     @Column(name = "total_questions", nullable = false)
     private Integer totalQuestions;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "exam_type", length = 20, nullable = false)
+    @Builder.Default
+    private ExamType examType = ExamType.OBJECTIVE;
 
     @Builder.Default
     @OneToMany(

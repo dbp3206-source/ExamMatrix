@@ -6,6 +6,7 @@ import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Getter
@@ -32,6 +33,10 @@ public class PaperQuestion {
 
     @Column(name = "question_order", nullable = false)
     private Integer questionOrder;
+
+    @Column(name = "points", precision = 8, scale = 2, nullable = false)
+    @Builder.Default
+    private BigDecimal points = BigDecimal.ONE;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

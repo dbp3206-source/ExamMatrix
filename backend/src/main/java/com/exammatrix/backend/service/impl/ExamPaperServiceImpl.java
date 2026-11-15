@@ -1,8 +1,10 @@
 package com.exammatrix.backend.service.impl;
 
 import com.exammatrix.backend.dto.request.GenerateExamPapersRequest;
+import com.exammatrix.backend.dto.request.UpdateExamPaperAccessRequest;
 import com.exammatrix.backend.dto.response.*;
 import com.exammatrix.backend.entity.*;
+import com.exammatrix.backend.entity.enums.ExamType;
 import com.exammatrix.backend.repository.ExamMatrixRepository;
 import com.exammatrix.backend.repository.ExamPaperRepository;
 import com.exammatrix.backend.repository.QuestionRepository;
@@ -150,15 +152,39 @@ public class ExamPaperServiceImpl implements ExamPaperService {
         examPaperRepository.flush();
     }
 
+    @Override
+    @Transactional
+    public ExamPaperDetailResponse updateExamPaperAccess(UUID id, UpdateExamPaperAccessRequest request) {
+        User currentUser = currentUserService.getCurrentUser();
+
+        ExamPaper paper = findExamPaperById(id);
+
+        checkCanAccess(paper.getExamMatrix(), currentUser);
+
+        if (request.getAccessType() != null) {
+            paper.setAccessType(request.getAccessType());
+        }
+
+        if (request.getIsPublished() != null) {
+            paper.setIsPublished(request.getIsPublished());
+        }
+
+        ExamPaper saved = examPaperRepository.save(paper);
+        return convertToResponse(saved);
+    }
+
     private List<Question> selectQuestionsForPaper(ExamMatrix matrix) {
         List<Question> selectedQuestions = new ArrayList<>();
 
         Set<UUID> selectedQuestionIds = new HashSet<>();
 
+        boolean isEssay = matrix.getExamType() == ExamType.ESSAY;
+
         for (ExamMatrixConfig config : matrix.getConfigs()) {
-            List<Question> candidates = new ArrayList<>(questionRepository.findAllByChapter_IdAndDifficulty(
+            List<Question> candidates = new ArrayList<>(questionRepository.findAllByChapterAndDifficultyAndIsEssay(
                         config.getChapter().getId(),
-                        config.getDifficulty()
+                        config.getDifficulty(),
+                        isEssay
                 )
             );
 
@@ -289,6 +315,8 @@ public class ExamPaperServiceImpl implements ExamPaperService {
                         question.getContent(),
                         question.getType(),
                         question.getDifficulty(),
+                        paperQuestion.getPoints(),
+                        question.getReferenceAnswer(),
                         answerResponses
                 )
             );
@@ -298,6 +326,8 @@ public class ExamPaperServiceImpl implements ExamPaperService {
                 paper.getId(),
                 paper.getExamMatrix().getId(),
                 paper.getExamCode(),
+                paper.getAccessType(),
+                paper.getIsPublished(),
                 paper.getCreatedAt(),
                 questionResponses
         );

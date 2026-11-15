@@ -40,4 +40,31 @@ export const realApi = {
   getPaper: (id) => unwrap(http.get(`/exam-papers/${id}`)),
   deletePaper: (id) => unwrap(http.delete(`/exam-papers/${id}`)),
   getDashboard: () => unwrap(http.get('/dashboard/summary')),
+  registerStudent: (body) => unwrap(http.post('/auth/register/student', body)),
+  getTeachers: () => unwrap(http.get('/student/teachers')),
+  createTeacherRequest: (body) => unwrap(http.post('/student/teacher-requests', body)),
+  getCurrentTeacherRequest: () =>
+    http.get('/student/teacher-requests/current')
+      .then(({ data }) => data)
+      .catch((err) => {
+        if (err?.status === 404 || err?.response?.status === 404) return null
+        throw err
+      }),
+  getStudentExams: (params) => unwrap(http.get('/student/exams', { params })),
+  getStudentExam: (paperId) => unwrap(http.get(`/student/exams/${paperId}`)),
+  startExamAttempt: (paperId) => unwrap(http.post(`/student/exams/${paperId}/attempts`)),
+  saveAttemptAnswer: (attemptId, body) => unwrap(http.patch(`/student/attempts/${attemptId}/answers`, body)),
+  submitExamAttempt: (attemptId) => unwrap(http.post(`/student/attempts/${attemptId}/submit`)),
+  getAttemptResult: (attemptId) => unwrap(http.get(`/student/attempts/${attemptId}`)),
+  getTeacherStudentRequests: (params) => unwrap(http.get('/teacher/student-requests', { params })),
+  reviewStudentRequest: (requestId, body) => unwrap(http.patch(`/teacher/student-requests/${requestId}`, body)),
+  getPendingGrading: (params) => unwrap(http.get('/teacher/grading/pending', { params })),
+  getGradingAttempt: (attemptId) => unwrap(http.get(`/teacher/grading/attempts/${attemptId}`)),
+  gradeAttemptAnswer: (attemptId, attemptAnswerId, body) => unwrap(http.patch(`/teacher/grading/attempts/${attemptId}/answers/${attemptAnswerId}`, body)),
+  completeGrading: (attemptId, body) => unwrap(http.patch(`/teacher/grading/attempts/${attemptId}/complete`, body)),
+  updatePaperAccess: (id, body) => unwrap(http.patch(`/exam-papers/${id}`, body)),
+  getTeacherClass: () => unwrap(http.get('/teacher/classes')),
+  updateTeacherClass: (body) => unwrap(http.patch('/teacher/classes', body)),
+  previewImportQuestions: (formData) => unwrap(http.post('/questions/import/preview', formData, { headers: { 'Content-Type': 'multipart/form-data' } })),
+  confirmImportQuestions: (body) => unwrap(http.post('/questions/import/confirm', body)),
 }

@@ -4,6 +4,7 @@ import com.exammatrix.backend.entity.enums.Difficulty;
 import com.exammatrix.backend.entity.enums.QuestionType;
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -17,5 +18,7 @@ public class PaperQuestionResponse {
     private String content;
     private QuestionType type;
     private Difficulty difficulty;
+    private BigDecimal points;
+    private String referenceAnswer;
     private List<AnswerResponse> answers;
 }

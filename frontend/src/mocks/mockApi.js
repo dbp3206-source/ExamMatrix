@@ -14,6 +14,16 @@ const read = () => {
   const saved = localStorage.getItem(STORAGE_KEY)
   if (saved) {
     const current = JSON.parse(saved)
+    if (!current.assignments) current.assignments = structuredClone(seedData.assignments || [])
+    if (!current.classes) current.classes = structuredClone(seedData.classes || [])
+    if (!current.attempts) current.attempts = []
+    if (!current.users.some((u) => u.role === 'STUDENT')) {
+      const student = seedData.users.find((u) => u.role === 'STUDENT')
+      if (student) current.users.push(student)
+    }
+    if ((current.papers || []).length === 0 && seedData.papers.length > 0) {
+      current.papers = structuredClone(seedData.papers)
+    }
     if (Number(current.schemaVersion || 1) < CURRENT_SCHEMA_VERSION) {
       const essayQuestions = seedData.questions.filter((item) => item.type === 'ESSAY' && !(current.questions || []).some((question) => question.id === item.id))
       const essayMatrices = seedData.matrices.filter((item) => item.examType === 'ESSAY' && !(current.matrices || []).some((matrix) => matrix.id === item.id))
@@ -214,5 +224,503 @@ export const mockApi = {
   async getDashboard() {
     const db = read(); const difficulty = ['EASY', 'MEDIUM', 'HARD'].map((key) => ({ difficulty: key, count: db.questions.filter((q) => q.difficulty === key).length }))
     return wait({ totalSubjects: db.subjects.length, totalChapters: db.chapters.length, totalQuestions: db.questions.length, totalMatrices: db.matrices.length, totalPapers: db.papers.length, difficulty, recentMatrices: [...db.matrices].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))).slice(0, 5) })
+  },
+  async registerStudent(body) {
+    const db = read()
+    if (db.users.some((item) => item.username === body.username)) return fail('Tên đăng nhập đã tồn tại', { username: 'Tên đăng nhập đã tồn tại' })
+    if (db.users.some((item) => item.email === body.email)) return fail('Email đã được sử dụng', { email: 'Email đã được sử dụng' })
+    const user = { id: newId(), ...body, role: 'STUDENT', status: 'ACTIVE', createdAt: new Date().toISOString() }
+    db.users.push(user); write(db)
+    return wait({ accessToken: `mock-token-${user.id}`, user: publicUser(user) }, 400)
+  },
+  getTeachers: async () => {
+    const db = read()
+    return wait(db.users.filter((u) => u.role === 'TEACHER' && u.status === 'ACTIVE').map(publicUser))
+  },
+  async getTeacherClass() {
+    const db = read(); const currentUser = JSON.parse(localStorage.getItem('exam_current_user') || '{}')
+    let cls = db.classes.find((c) => c.teacherId === currentUser.id)
+    if (!cls) {
+      cls = { id: newId(), teacherId: currentUser.id, name: `Lớp của ${currentUser.fullName}`, classCode: `CLASS_${currentUser.username.toUpperCase()}`, joinPassword: '123', createdAt: new Date().toISOString() }
+      db.classes.push(cls); write(db)
+    }
+    const studentCount = db.assignments.filter((a) => a.teacherId === currentUser.id && a.status === 'APPROVED').length
+    return wait({ ...cls, teacherName: currentUser.fullName, studentCount, hasPassword: true })
+  },
+  async updateTeacherClass(body) {
+    const db = read(); const currentUser = JSON.parse(localStorage.getItem('exam_current_user') || '{}')
+    let cls = db.classes.find((c) => c.teacherId === currentUser.id)
+    if (!cls) {
+      cls = { id: newId(), teacherId: currentUser.id, name: body.name, classCode: body.classCode, joinPassword: body.password || '123', createdAt: new Date().toISOString() }
+      db.classes.push(cls)
+    } else {
+      cls.name = body.name
+      cls.classCode = body.classCode
+      if (body.password) cls.joinPassword = body.password
+    }
+    write(db)
+    const studentCount = db.assignments.filter((a) => a.teacherId === currentUser.id && a.status === 'APPROVED').length
+    return wait({ ...cls, teacherName: currentUser.fullName, studentCount, hasPassword: true })
+  },
+  async createTeacherRequest(body) {
+    const db = read(); const currentUser = JSON.parse(localStorage.getItem('exam_current_user') || '{}')
+    let cls = db.classes.find((c) => (body.teacherId && c.teacherId === body.teacherId) || (body.classCode && c.classCode === body.classCode))
+    if (!cls && body.teacherId) {
+      const teacher = db.users.find((u) => u.id === body.teacherId)
+      if (teacher) {
+        cls = { id: newId(), teacherId: teacher.id, name: `Lớp của ${teacher.fullName}`, classCode: `CLASS_${teacher.username.toUpperCase()}`, joinPassword: '123', createdAt: new Date().toISOString() }
+        db.classes.push(cls)
+      }
+    }
+    if (!cls) return fail('Không tìm thấy lớp học của giáo viên')
+    if (body.password && body.password !== cls.joinPassword) return fail('Mật khẩu lớp học không chính xác')
+
+    let assignment = db.assignments.find((a) => a.studentId === currentUser.id)
+    const teacher = db.users.find((u) => u.id === cls.teacherId)
+    if (assignment) {
+      assignment.teacherId = cls.teacherId
+      assignment.classId = cls.id
+      assignment.status = 'APPROVED'
+      assignment.requestedAt = new Date().toISOString()
+      assignment.reviewedAt = new Date().toISOString()
+      assignment.decisionNote = 'Tham gia bằng mật khẩu lớp học'
+    } else {
+      assignment = {
+        id: newId(),
+        studentId: currentUser.id,
+        teacherId: cls.teacherId,
+        classId: cls.id,
+        status: 'APPROVED',
+        requestedAt: new Date().toISOString(),
+        reviewedAt: new Date().toISOString(),
+        decisionNote: 'Tham gia bằng mật khẩu lớp học',
+      }
+      db.assignments.push(assignment)
+    }
+    write(db)
+    return wait({
+      ...assignment,
+      studentName: currentUser.fullName,
+      studentEmail: currentUser.email,
+      teacherName: teacher?.fullName,
+      teacherEmail: teacher?.email,
+      classCode: cls.classCode,
+      className: cls.name,
+    })
+  },
+  async getCurrentTeacherRequest() {
+    const db = read(); const currentUser = JSON.parse(localStorage.getItem('exam_current_user') || '{}')
+    const assignment = db.assignments.find((a) => a.studentId === currentUser.id)
+    if (!assignment) return wait(null)
+    const teacher = db.users.find((u) => u.id === assignment.teacherId)
+    const cls = db.classes.find((c) => c.id === assignment.classId || c.teacherId === assignment.teacherId)
+    return wait({
+      ...assignment,
+      studentName: currentUser.fullName,
+      studentEmail: currentUser.email,
+      teacherName: teacher?.fullName,
+      teacherEmail: teacher?.email,
+      classCode: cls?.classCode,
+      className: cls?.name,
+    })
+  },
+  async getTeacherStudentRequests(params = {}) {
+    const db = read(); const currentUser = JSON.parse(localStorage.getItem('exam_current_user') || '{}')
+    let items = db.assignments.filter((a) => a.teacherId === currentUser.id)
+    if (params.status) items = items.filter((a) => a.status === params.status)
+    const mapped = items.map((a) => {
+      const student = db.users.find((u) => u.id === a.studentId)
+      return {
+        ...a,
+        studentName: student?.fullName || 'Học sinh',
+        studentEmail: student?.email || '',
+      }
+    })
+    return wait(page(mapped, params))
+  },
+  async reviewStudentRequest(requestId, body) {
+    const db = read()
+    const assignment = db.assignments.find((a) => a.id === requestId)
+    if (!assignment) return fail('Không tìm thấy yêu cầu')
+    assignment.status = body.status
+    assignment.decisionNote = body.decisionNote || null
+    assignment.reviewedAt = new Date().toISOString()
+    write(db)
+    const student = db.users.find((u) => u.id === assignment.studentId)
+    const teacher = db.users.find((u) => u.id === assignment.teacherId)
+    return wait({
+      ...assignment,
+      studentName: student?.fullName,
+      studentEmail: student?.email,
+      teacherName: teacher?.fullName,
+    })
+  },
+  async getStudentExams(params = {}) {
+    const db = read(); const currentUser = JSON.parse(localStorage.getItem('exam_current_user') || '{}')
+    const assignment = db.assignments.find((a) => a.studentId === currentUser.id && a.status === 'APPROVED')
+
+    const accessible = db.papers.filter((paper) => {
+      const isPub = paper.isPublished !== false
+      if (!isPub) return false
+      if (paper.accessType === 'PUBLIC' || !paper.accessType) return true
+      const matrix = db.matrices.find((m) => m.id === paper.matrixId)
+      return matrix && assignment && matrix.teacherId === assignment.teacherId
+    }).map((paper) => {
+      const matrix = db.matrices.find((m) => m.id === paper.matrixId)
+      const subject = db.subjects.find((s) => s.id === matrix?.subjectId)
+      const teacher = db.users.find((u) => u.id === matrix?.teacherId)
+      const attempt = db.attempts.find((att) => att.studentId === currentUser.id && att.paperId === paper.id)
+
+      return {
+        paperId: paper.id,
+        examCode: paper.examCode,
+        title: matrix?.title || 'Đề thi',
+        teacherName: teacher?.fullName || '',
+        subjectName: subject?.name || '',
+        examType: matrix?.examType || 'OBJECTIVE',
+        duration: matrix?.duration || 45,
+        totalQuestions: (paper.questions || []).length,
+        accessType: paper.accessType || 'PUBLIC',
+        attemptStatus: attempt?.status || 'AVAILABLE',
+        attemptId: attempt?.id || null,
+        createdAt: paper.createdAt,
+      }
+    })
+    return wait(page(accessible, params))
+  },
+  async getStudentExam(paperId) {
+    const db = read()
+    const paper = db.papers.find((p) => p.id === paperId)
+    if (!paper) return fail('Không tìm thấy đề thi')
+    const matrix = db.matrices.find((m) => m.id === paper.matrixId)
+    const subject = db.subjects.find((s) => s.id === matrix?.subjectId)
+    const teacher = db.users.find((u) => u.id === matrix?.teacherId)
+
+    const sanitizedQuestions = (paper.questions || []).map((q, idx) => ({
+      id: q.id,
+      questionOrder: q.questionOrder || idx + 1,
+      content: q.content,
+      type: q.type,
+      difficulty: q.difficulty,
+      points: q.points || 1,
+      answers: q.type === 'ESSAY' ? [] : (q.answers || []).map((a) => ({ id: a.id, content: a.content })),
+    }))
+
+    return wait({
+      paperId: paper.id,
+      examCode: paper.examCode,
+      title: matrix?.title || 'Đề thi',
+      subjectName: subject?.name || '',
+      examType: matrix?.examType || 'OBJECTIVE',
+      duration: matrix?.duration || 45,
+      totalQuestions: sanitizedQuestions.length,
+      teacherName: teacher?.fullName || '',
+      accessType: paper.accessType || 'PUBLIC',
+      questions: sanitizedQuestions,
+    })
+  },
+  async startExamAttempt(paperId) {
+    const db = read(); const currentUser = JSON.parse(localStorage.getItem('exam_current_user') || '{}')
+    const paper = db.papers.find((p) => p.id === paperId)
+    if (!paper) return fail('Không tìm thấy đề thi')
+    const matrix = db.matrices.find((m) => m.id === paper.matrixId)
+
+    let attempt = db.attempts.find((a) => a.studentId === currentUser.id && a.paperId === paperId)
+    if (attempt) {
+      if (attempt.status === 'IN_PROGRESS') {
+        const elapsed = (Date.now() - new Date(attempt.startedAt).getTime()) / 1000
+        const durationSeconds = (matrix?.duration || 45) * 60
+        const remaining = Math.max(0, Math.round(durationSeconds - elapsed))
+        return wait({ attemptId: attempt.id, startedAt: attempt.startedAt, durationMinutes: matrix?.duration || 45, remainingSeconds: remaining, status: attempt.status })
+      }
+      return fail('Bạn đã hoàn thành bài thi này')
+    }
+
+    const durationMinutes = matrix?.duration || 45
+    const totalPoints = (paper.questions || []).reduce((sum, q) => sum + (Number(q.points) || 1), 0)
+    attempt = {
+      id: newId(),
+      paperId,
+      studentId: currentUser.id,
+      teacherId: matrix?.teacherId,
+      status: 'IN_PROGRESS',
+      startedAt: new Date().toISOString(),
+      maxScore: totalPoints || 10,
+      score: null,
+      answers: {},
+    }
+    db.attempts.push(attempt)
+    write(db)
+    return wait({ attemptId: attempt.id, startedAt: attempt.startedAt, durationMinutes, remainingSeconds: durationMinutes * 60, status: 'IN_PROGRESS' })
+  },
+  async saveAttemptAnswer(attemptId, body) {
+    const db = read()
+    const attempt = db.attempts.find((a) => a.id === attemptId)
+    if (!attempt || attempt.status !== 'IN_PROGRESS') return fail('Không thể lưu câu trả lời')
+    attempt.answers[body.questionId] = {
+      selectedAnswerIds: body.selectedAnswerIds || [],
+      essayAnswer: body.essayAnswer || null,
+    }
+    write(db)
+    return wait({ success: true }, 80)
+  },
+  async submitExamAttempt(attemptId) {
+    const db = read()
+    const attempt = db.attempts.find((a) => a.id === attemptId)
+    if (!attempt) return fail('Không tìm thấy bài thi')
+    const paper = db.papers.find((p) => p.id === attempt.paperId)
+    const matrix = db.matrices.find((m) => m.id === paper?.matrixId)
+
+    attempt.submittedAt = new Date().toISOString()
+    let hasEssay = false
+    let totalScore = 0
+
+    const gradedAnswers = (paper?.questions || []).map((q, idx) => {
+      const studentAns = attempt.answers[q.id] || {}
+      if (q.type === 'ESSAY') {
+        hasEssay = true
+        return {
+          questionId: q.id,
+          questionOrder: idx + 1,
+          content: q.content,
+          type: q.type,
+          points: q.points || 1,
+          essayAnswer: studentAns.essayAnswer || null,
+          selectedAnswerIds: [],
+          awardedScore: null,
+          feedback: null,
+          isCorrect: null,
+        }
+      }
+      const correctIds = (q.answers || []).filter((a) => a.isCorrect).map((a) => a.id)
+      const selected = studentAns.selectedAnswerIds || []
+      const isCorrect = correctIds.length > 0 && correctIds.length === selected.length && correctIds.every((id) => selected.includes(id))
+      const pts = isCorrect ? (Number(q.points) || 1) : 0
+      totalScore += pts
+      return {
+        questionId: q.id,
+        questionOrder: idx + 1,
+        content: q.content,
+        type: q.type,
+        points: q.points || 1,
+        essayAnswer: null,
+        selectedAnswerIds: selected,
+        awardedScore: pts,
+        feedback: null,
+        isCorrect,
+      }
+    })
+
+    if (hasEssay) {
+      attempt.status = 'WAITING_GRADING'
+      attempt.score = null
+    } else {
+      attempt.status = 'COMPLETED'
+      attempt.score = totalScore
+      attempt.gradedAt = new Date().toISOString()
+    }
+    attempt.gradedAnswers = gradedAnswers
+    write(db)
+
+    const subject = db.subjects.find((s) => s.id === matrix?.subjectId)
+    return wait({
+      attemptId: attempt.id,
+      paperId: paper?.id,
+      examCode: paper?.examCode,
+      paperTitle: matrix?.title,
+      subjectName: subject?.name,
+      examType: matrix?.examType,
+      status: attempt.status,
+      score: attempt.score,
+      maxScore: attempt.maxScore,
+      startedAt: attempt.startedAt,
+      submittedAt: attempt.submittedAt,
+      gradedAt: attempt.gradedAt,
+      answers: gradedAnswers,
+    })
+  },
+  async getAttemptResult(attemptId) {
+    const db = read()
+    const attempt = db.attempts.find((a) => a.id === attemptId)
+    if (!attempt) return fail('Không tìm thấy kết quả bài thi')
+    const paper = db.papers.find((p) => p.id === attempt.paperId)
+    const matrix = db.matrices.find((m) => m.id === paper?.matrixId)
+    const subject = db.subjects.find((s) => s.id === matrix?.subjectId)
+
+    const isCompleted = attempt.status === 'COMPLETED'
+    const answers = (attempt.gradedAnswers || []).map((a) => ({
+      ...a,
+      awardedScore: isCompleted ? a.awardedScore : null,
+      feedback: isCompleted ? a.feedback : null,
+      isCorrect: isCompleted ? a.isCorrect : null,
+    }))
+
+    return wait({
+      attemptId: attempt.id,
+      paperId: paper?.id,
+      examCode: paper?.examCode,
+      paperTitle: matrix?.title,
+      subjectName: subject?.name,
+      examType: matrix?.examType,
+      status: attempt.status,
+      score: isCompleted ? attempt.score : null,
+      maxScore: attempt.maxScore,
+      startedAt: attempt.startedAt,
+      submittedAt: attempt.submittedAt,
+      gradedAt: attempt.gradedAt,
+      answers,
+    })
+  },
+  async getPendingGrading(params = {}) {
+    const db = read(); const currentUser = JSON.parse(localStorage.getItem('exam_current_user') || '{}')
+    const pending = db.attempts.filter((a) => a.status === 'WAITING_GRADING' && (currentUser.role === 'ADMIN' || a.teacherId === currentUser.id)).map((a) => {
+      const student = db.users.find((u) => u.id === a.studentId)
+      const paper = db.papers.find((p) => p.id === a.paperId)
+      const matrix = db.matrices.find((m) => m.id === paper?.matrixId)
+      return {
+        attemptId: a.id,
+        paperId: a.paperId,
+        paperTitle: matrix?.title || 'Đề thi',
+        studentId: a.studentId,
+        studentName: student?.fullName || 'Học sinh',
+        studentEmail: student?.email || '',
+        submittedAt: a.submittedAt,
+        status: a.status,
+        examType: matrix?.examType || 'ESSAY',
+      }
+    })
+    return wait(page(pending, params))
+  },
+  async getGradingAttempt(attemptId) {
+    const db = read()
+    const attempt = db.attempts.find((a) => a.id === attemptId)
+    if (!attempt) return fail('Không tìm thấy bài thi')
+    const paper = db.papers.find((p) => p.id === attempt.paperId)
+    const matrix = db.matrices.find((m) => m.id === paper?.matrixId)
+    const student = db.users.find((u) => u.id === attempt.studentId)
+
+    const answers = (paper?.questions || []).map((q, idx) => {
+      const existing = (attempt.gradedAnswers || []).find((ans) => ans.questionId === q.id) || {}
+      return {
+        attemptAnswerId: existing.questionId || q.id,
+        questionId: q.id,
+        questionOrder: idx + 1,
+        content: q.content,
+        type: q.type,
+        points: q.points || 1,
+        essayAnswer: existing.essayAnswer || (attempt.answers[q.id]?.essayAnswer) || null,
+        referenceAnswer: q.referenceAnswer || null,
+        selectedAnswerIds: existing.selectedAnswerIds || (attempt.answers[q.id]?.selectedAnswerIds) || [],
+        awardedScore: existing.awardedScore != null ? existing.awardedScore : null,
+        feedback: existing.feedback || '',
+        isCorrect: existing.isCorrect,
+      }
+    })
+
+    return wait({
+      attemptId: attempt.id,
+      paperId: paper?.id,
+      paperTitle: matrix?.title,
+      studentId: student?.id,
+      studentName: student?.fullName,
+      studentEmail: student?.email,
+      submittedAt: attempt.submittedAt,
+      status: attempt.status,
+      examType: matrix?.examType,
+      score: attempt.score,
+      maxScore: attempt.maxScore,
+      answers,
+    })
+  },
+  async gradeAttemptAnswer(attemptId, attemptAnswerId, body) {
+    const db = read()
+    const attempt = db.attempts.find((a) => a.id === attemptId)
+    if (!attempt) return fail('Không tìm thấy bài thi')
+    const ans = (attempt.gradedAnswers || []).find((a) => a.questionId === attemptAnswerId)
+    if (ans) {
+      ans.awardedScore = Number(body.awardedScore)
+      ans.feedback = body.feedback
+    }
+    write(db)
+    return wait({ success: true })
+  },
+  async completeGrading(attemptId, _body) {
+    const db = read()
+    const attempt = db.attempts.find((a) => a.id === attemptId)
+    if (!attempt) return fail('Không tìm thấy bài thi')
+    const sum = (attempt.gradedAnswers || []).reduce((acc, a) => acc + (Number(a.awardedScore) || 0), 0)
+    attempt.score = sum
+    attempt.status = 'COMPLETED'
+    attempt.gradedAt = new Date().toISOString()
+    write(db)
+    return wait({ success: true })
+  },
+  async updatePaperAccess(id, body) {
+    const db = read()
+    const paper = db.papers.find((p) => p.id === id)
+    if (!paper) return fail('Không tìm thấy đề thi')
+    if (body.accessType) paper.accessType = body.accessType
+    if (body.isPublished !== undefined) paper.isPublished = body.isPublished
+    write(db)
+    return wait(normalizePaper(paper))
+  },
+  async previewImportQuestions(formData) {
+    const file = formData.get('file')
+    if (!file) return fail('File import không được để trống')
+    const name = file.name || 'import.docx'
+    if (name.endsWith('.png') || name.endsWith('.jpg') || name.endsWith('.jpeg')) {
+      return fail('Tính năng nhận diện từ ảnh hiện chưa được hỗ trợ do yêu cầu nghiêm ngặt không sử dụng dịch vụ AI / Cloud OCR bên ngoài.')
+    }
+    return wait({
+      fileName: name,
+      totalParsed: 2,
+      validCount: 2,
+      errorCount: 0,
+      items: [
+        {
+          itemIndex: 1,
+          chapterId: 1,
+          chapterName: 'Hàm số và đồ thị',
+          content: 'Nghiệm của phương trình 2x - 4 = 0 là gì?',
+          difficulty: 'EASY',
+          type: 'SINGLE_CHOICE',
+          answers: [{ content: 'x = 2', isCorrect: true }, { content: 'x = -2', isCorrect: false }],
+          valid: true,
+          errors: [],
+        },
+        {
+          itemIndex: 2,
+          chapterId: 1,
+          chapterName: 'Hàm số và đồ thị',
+          content: 'Hãy giải thích định nghĩa tiệm cận đứng của đồ thị hàm số.',
+          difficulty: 'MEDIUM',
+          type: 'ESSAY',
+          referenceAnswer: 'Đường thẳng x = x₀ là tiệm cận đứng nếu ít nhất một trong các giới hạn một bên khi x dần tới x₀ là vô cực.',
+          answers: [],
+          valid: true,
+          errors: [],
+        },
+      ],
+    })
+  },
+  async confirmImportQuestions(body) {
+    const db = read(); const currentUser = JSON.parse(localStorage.getItem('exam_current_user') || '{}')
+    const saved = (body.items || []).map((item) => {
+      const q = {
+        id: newId(),
+        chapterId: Number(item.chapterId),
+        teacherId: currentUser.id,
+        content: item.content,
+        difficulty: item.difficulty,
+        type: item.type,
+        referenceAnswer: item.referenceAnswer || null,
+        answers: item.type === 'ESSAY' ? [] : (item.answers || []).map((a) => ({ id: newId(), content: a.content, isCorrect: Boolean(a.isCorrect) })),
+        createdAt: new Date().toISOString(),
+      }
+      db.questions.push(q)
+      return q
+    })
+    write(db)
+    return wait(saved)
   },
 }

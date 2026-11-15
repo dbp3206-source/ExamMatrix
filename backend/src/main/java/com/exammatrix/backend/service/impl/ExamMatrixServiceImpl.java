@@ -6,6 +6,7 @@ import com.exammatrix.backend.dto.response.ExamMatrixResponse;
 import com.exammatrix.backend.dto.response.MatrixConfigResponse;
 import com.exammatrix.backend.dto.response.PageResponse;
 import com.exammatrix.backend.entity.*;
+import com.exammatrix.backend.entity.enums.ExamType;
 import com.exammatrix.backend.repository.ChapterRepository;
 import com.exammatrix.backend.repository.ExamMatrixRepository;
 import com.exammatrix.backend.repository.QuestionRepository;
@@ -17,12 +18,14 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.*;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class ExamMatrixServiceImpl implements ExamMatrixService {
     private final ExamMatrixRepository examMatrixRepository;
     private final SubjectRepository subjectRepository;
@@ -92,6 +95,7 @@ public class ExamMatrixServiceImpl implements ExamMatrixService {
     }
 
     @Override
+    @Transactional
     public ExamMatrixResponse createExamMatrix(ExamMatrixRequest request) {
         User currentUser = currentUserService.getCurrentUser();
 
@@ -104,6 +108,7 @@ public class ExamMatrixServiceImpl implements ExamMatrixService {
         matrix.setTitle(request.getTitle().trim());
         matrix.setDuration(request.getDuration());
         matrix.setTotalQuestions(request.getTotalQuestions());
+        matrix.setExamType(request.getExamType() != null ? request.getExamType() : ExamType.OBJECTIVE);
 
         addAndValidateConfigs(matrix, request);
 
@@ -113,6 +118,7 @@ public class ExamMatrixServiceImpl implements ExamMatrixService {
     }
 
     @Override
+    @Transactional
     public ExamMatrixResponse updateExamMatrix(UUID id, ExamMatrixRequest request) {
         User currentUser = currentUserService.getCurrentUser();
 
@@ -126,6 +132,9 @@ public class ExamMatrixServiceImpl implements ExamMatrixService {
         matrix.setTitle(request.getTitle().trim());
         matrix.setDuration(request.getDuration());
         matrix.setTotalQuestions(request.getTotalQuestions());
+        if (request.getExamType() != null) {
+            matrix.setExamType(request.getExamType());
+        }
 
         matrix.getConfigs().clear();
 
@@ -137,6 +146,7 @@ public class ExamMatrixServiceImpl implements ExamMatrixService {
     }
 
     @Override
+    @Transactional
     public void deleteExamMatrix(UUID id) {
         User currentUser = currentUserService.getCurrentUser();
 
@@ -353,6 +363,7 @@ public class ExamMatrixServiceImpl implements ExamMatrixService {
                 matrix.getTitle(),
                 matrix.getDuration(),
                 matrix.getTotalQuestions(),
+                matrix.getExamType(),
                 configResponses,
                 matrix.getCreatedAt(),
                 matrix.getUpdatedAt()

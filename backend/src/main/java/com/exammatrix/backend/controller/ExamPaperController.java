@@ -1,5 +1,6 @@
 package com.exammatrix.backend.controller;
 
+import com.exammatrix.backend.dto.request.UpdateExamPaperAccessRequest;
 import com.exammatrix.backend.dto.response.ExamPaperDetailResponse;
 import com.exammatrix.backend.dto.response.PageResponse;
 import com.exammatrix.backend.service.ExamPaperService;
@@ -37,6 +38,14 @@ public class ExamPaperController {
     @GetMapping("/{id}")
     public ResponseEntity<ExamPaperDetailResponse> getExamPaperById(@PathVariable UUID id) {
         return ResponseEntity.ok(examPaperService.getExamPaperById(id));
+    }
+
+    @PatchMapping("/{id}")
+    public ResponseEntity<ExamPaperDetailResponse> updateExamPaperAccess(
+            @PathVariable UUID id,
+            @RequestBody UpdateExamPaperAccessRequest request
+    ) {
+        return ResponseEntity.ok(examPaperService.updateExamPaperAccess(id, request));
     }
 
     @DeleteMapping("/{id}")

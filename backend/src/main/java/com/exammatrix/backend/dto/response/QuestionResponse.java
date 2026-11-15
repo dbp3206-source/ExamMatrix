@@ -19,6 +19,7 @@ public class QuestionResponse {
     private UUID teacherId;
     private Difficulty difficulty;
     private QuestionType type;
+    private String referenceAnswer;
     private List<AnswerResponse> answers;
     private LocalDateTime createdAt;
 }

@@ -13,3 +13,13 @@ export function AdminRoute() {
   const { user } = useAuth()
   return user?.role === 'ADMIN' ? <Outlet /> : <Navigate to="/403" replace />
 }
+
+export function TeacherOrAdminRoute() {
+  const { user } = useAuth()
+  return (user?.role === 'TEACHER' || user?.role === 'ADMIN') ? <Outlet /> : <Navigate to="/403" replace />
+}
+
+export function StudentRoute() {
+  const { user } = useAuth()
+  return user?.role === 'STUDENT' ? <Outlet /> : <Navigate to="/403" replace />
+}

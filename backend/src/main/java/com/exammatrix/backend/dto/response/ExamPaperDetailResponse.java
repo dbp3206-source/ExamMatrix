@@ -1,5 +1,6 @@
 package com.exammatrix.backend.dto.response;
 
+import com.exammatrix.backend.entity.enums.ExamAccessType;
 import lombok.*;
 
 import java.time.LocalDateTime;
@@ -14,6 +15,8 @@ public class ExamPaperDetailResponse {
     private UUID id;
     private UUID matrixId;
     private String examCode;
+    private ExamAccessType accessType;
+    private Boolean isPublished;
     private LocalDateTime createdAt;
     private List<PaperQuestionResponse> questions;
 }

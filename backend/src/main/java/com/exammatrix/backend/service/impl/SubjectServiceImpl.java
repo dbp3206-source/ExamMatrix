@@ -8,6 +8,7 @@ import com.exammatrix.backend.service.SubjectService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
@@ -16,6 +17,7 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class SubjectServiceImpl implements SubjectService {
     private final SubjectRepository subjectRepository;
 
@@ -41,6 +43,7 @@ public class SubjectServiceImpl implements SubjectService {
     }
 
     @Override
+    @Transactional
     public SubjectResponse createNewSubject(SubjectRequest request) {
         String code = request.getCode()
                 .trim()
@@ -67,6 +70,7 @@ public class SubjectServiceImpl implements SubjectService {
     }
 
     @Override
+    @Transactional
     public SubjectResponse updateSubjectById(Integer id, SubjectRequest request) {
         Subject subject = findSubjectById(id);
 
@@ -91,6 +95,7 @@ public class SubjectServiceImpl implements SubjectService {
     }
 
     @Override
+    @Transactional
     public void deleteSubjectById(Integer id) {
         Subject subject = findSubjectById(id);
 

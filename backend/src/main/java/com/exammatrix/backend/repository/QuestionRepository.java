@@ -56,6 +56,23 @@ public interface QuestionRepository extends JpaRepository<Question, UUID> {
 
     long countByChapter_IdAndDifficulty(Integer chapterId, Difficulty difficulty);
 
+    @Query("""
+        SELECT count(q)
+        FROM Question q
+        WHERE q.chapter.id = :chapterId
+        AND q.difficulty = :difficulty
+        AND (
+            (:isEssay = true AND q.type = com.exammatrix.backend.entity.enums.QuestionType.ESSAY)
+            OR
+            (:isEssay = false AND q.type <> com.exammatrix.backend.entity.enums.QuestionType.ESSAY)
+        )
+    """)
+    long countByChapterAndDifficultyAndIsEssay(
+            @Param("chapterId") Integer chapterId,
+            @Param("difficulty") Difficulty difficulty,
+            @Param("isEssay") boolean isEssay
+    );
+
     @Override
     @EntityGraph(attributePaths = {
         "chapter",
@@ -68,6 +85,24 @@ public interface QuestionRepository extends JpaRepository<Question, UUID> {
     List<Question> findAllByChapter_IdAndDifficulty(
             Integer chapterId,
             Difficulty difficulty
+    );
+
+    @EntityGraph(attributePaths = "answers")
+    @Query("""
+        SELECT q
+        FROM Question q
+        WHERE q.chapter.id = :chapterId
+        AND q.difficulty = :difficulty
+        AND (
+            (:isEssay = true AND q.type = com.exammatrix.backend.entity.enums.QuestionType.ESSAY)
+            OR
+            (:isEssay = false AND q.type <> com.exammatrix.backend.entity.enums.QuestionType.ESSAY)
+        )
+    """)
+    List<Question> findAllByChapterAndDifficultyAndIsEssay(
+            @Param("chapterId") Integer chapterId,
+            @Param("difficulty") Difficulty difficulty,
+            @Param("isEssay") boolean isEssay
     );
 
     long countByDifficulty(Difficulty difficulty);

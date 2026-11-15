@@ -9,7 +9,7 @@ export function ToastProvider({ children }) {
     setToasts((items) => [...items, { id, message, type }])
     window.setTimeout(() => setToasts((items) => items.filter((item) => item.id !== id)), 3500)
   }, [])
-  const value = useMemo(() => ({ notify }), [notify])
+  const value = useMemo(() => ({ notify, showToast: notify }), [notify])
   return (
     <ToastContext.Provider value={value}>
       {children}

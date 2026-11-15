@@ -126,8 +126,15 @@ public class SecurityConfig {
 
                 .requestMatchers(
                     HttpMethod.POST,
-                    "/auth/login"
+                    "/auth/login",
+                    "/auth/register/student"
                 ).permitAll()
+
+                .requestMatchers("/student/**")
+                .hasRole("STUDENT")
+
+                .requestMatchers("/teacher/**")
+                .hasAnyRole("ADMIN", "TEACHER")
 
                 .requestMatchers(
                     "/roles/**",

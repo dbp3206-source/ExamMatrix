@@ -27,8 +27,9 @@ public class QuestionRequest {
     @NotNull(message = "Loại câu hỏi không được để trống")
     private QuestionType type;
 
-    @NotNull(message = "Danh sách đáp án không được để trống")
-    @Size(min = 2, message = "Câu hỏi phải có ít nhất 2 đáp án")
+    @Size(max = 10000, message = "Đáp án tham khảo tối đa 10000 ký tự")
+    private String referenceAnswer;
+
     @Valid
     private List<AnswerRequest> answers;
 }

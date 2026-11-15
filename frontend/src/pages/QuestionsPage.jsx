@@ -109,6 +109,228 @@ function QuestionDetail({ item, chapter, subject, onClose }) {
   </Modal>
 }
 
+function QuestionImportModal({ subjects, allChapters, onClose }) {
+  const queryClient = useQueryClient()
+  const { notify } = useToast()
+  const [selectedFile, setSelectedFile] = useState(null)
+  const [subjectId, setSubjectId] = useState('')
+  const [chapterId, setChapterId] = useState('')
+  const [previewData, setPreviewData] = useState(null)
+  const [errorMessage, setErrorMessage] = useState('')
+
+  const chapters = useMemo(
+    () => allChapters.filter((chapter) => !subjectId || chapter.subjectId === Number(subjectId)),
+    [allChapters, subjectId]
+  )
+
+  const previewMutation = useMutation({
+    mutationFn: (formData) => api.previewImportQuestions(formData),
+    onSuccess: (data) => {
+      setPreviewData(data)
+      setErrorMessage('')
+    },
+    onError: (err) => {
+      setErrorMessage(err.message || 'Không thể đọc và phân tích file')
+    },
+  })
+
+  const confirmMutation = useMutation({
+    mutationFn: (body) => api.confirmImportQuestions(body),
+    onSuccess: (data) => {
+      notify(`Đã import thành công ${data.length} câu hỏi vào ngân hàng`)
+      queryClient.invalidateQueries({ queryKey: ['questions'] })
+      queryClient.invalidateQueries({ queryKey: ['availability'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      onClose()
+    },
+    onError: (err) => {
+      setErrorMessage(err.message || 'Không thể lưu câu hỏi vào hệ thống')
+    },
+  })
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0]
+    setErrorMessage('')
+    setPreviewData(null)
+    if (!file) {
+      setSelectedFile(null)
+      return
+    }
+    const name = file.name.toLowerCase()
+    if (name.endsWith('.png') || name.endsWith('.jpg') || name.endsWith('.jpeg')) {
+      setSelectedFile(null)
+      setErrorMessage('Tính năng nhận diện từ ảnh hiện chưa được hỗ trợ do yêu cầu nghiêm ngặt không sử dụng dịch vụ AI / Cloud OCR bên ngoài.')
+      return
+    }
+    setSelectedFile(file)
+  }
+
+  const handlePreview = (e) => {
+    e.preventDefault()
+    if (!selectedFile) {
+      setErrorMessage('Vui lòng chọn file Word (.docx) hoặc PDF (.pdf)')
+      return
+    }
+    const formData = new FormData()
+    formData.append('file', selectedFile)
+    if (subjectId) formData.append('subjectId', subjectId)
+    if (chapterId) formData.append('chapterId', chapterId)
+    previewMutation.mutate(formData)
+  }
+
+  const handleConfirm = () => {
+    if (!previewData || !previewData.items) return
+    const validItems = previewData.items.filter((item) => item.valid)
+    if (validItems.length === 0) {
+      setErrorMessage('Không có câu hỏi hợp lệ nào để import')
+      return
+    }
+    confirmMutation.mutate({
+      subjectId: subjectId ? Number(subjectId) : undefined,
+      items: validItems.map((item) => ({
+        chapterId: item.chapterId || Number(chapterId),
+        content: item.content,
+        difficulty: item.difficulty || 'MEDIUM',
+        type: item.type,
+        referenceAnswer: item.referenceAnswer || null,
+        answers: item.answers || [],
+      })),
+    })
+  }
+
+  return (
+    <Modal title="Nhập câu hỏi từ file (Word / PDF)" onClose={onClose} wide>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <p className="muted" style={{ margin: 0 }}>
+          Hỗ trợ tải lên file tài liệu định dạng Word (.docx) hoặc PDF (.pdf). Hệ thống sử dụng thư viện phân tích nội bộ (local), đảm bảo không gửi dữ liệu ra bên ngoài.
+        </p>
+
+        {errorMessage && <div className="alert error">{errorMessage}</div>}
+
+        <form onSubmit={handlePreview}>
+          <div className="form-grid two">
+            <label>
+              Môn học áp dụng
+              <select
+                value={subjectId}
+                onChange={(e) => {
+                  setSubjectId(e.target.value)
+                  setChapterId('')
+                }}
+              >
+                <option value="">Chọn môn học</option>
+                {subjects.map((sub) => (
+                  <option key={sub.id} value={sub.id}>
+                    {sub.code} - {sub.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              Chương mặc định
+              <select
+                value={chapterId}
+                onChange={(e) => setChapterId(e.target.value)}
+              >
+                <option value="">Chọn chương</option>
+                {chapters.map((ch) => (
+                  <option key={ch.id} value={ch.id}>
+                    {ch.orderIndex}. {ch.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="span-two">
+              Tệp tài liệu (.docx, .pdf)
+              <input
+                type="file"
+                accept=".docx,.pdf,.doc,.png,.jpg,.jpeg"
+                onChange={handleFileChange}
+                required
+              />
+            </label>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '14px' }}>
+            <button
+              type="submit"
+              className="button"
+              disabled={!selectedFile || previewMutation.isPending}
+            >
+              {previewMutation.isPending ? 'Đang đọc và phân tích file...' : 'Xem trước nội dung phân tích'}
+            </button>
+          </div>
+        </form>
+
+        {previewData && (
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div>
+                <h3 style={{ margin: 0 }}>Kết quả phân tích: {previewData.fileName}</h3>
+                <span className="subtext">
+                  Tổng số câu: {previewData.totalParsed} · Hợp lệ: {previewData.validCount} · Lỗi: {previewData.errorCount}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="button"
+                disabled={previewData.validCount === 0 || confirmMutation.isPending}
+                onClick={handleConfirm}
+              >
+                {confirmMutation.isPending ? 'Đang lưu...' : `Xác nhận lưu ${previewData.validCount} câu hỏi hợp lệ`}
+              </button>
+            </div>
+
+            <div className="table-wrap" style={{ maxHeight: '360px', overflowY: 'auto' }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th style={{ width: '60px' }}>STT</th>
+                    <th>Nội dung câu hỏi</th>
+                    <th>Loại</th>
+                    <th>Độ khó</th>
+                    <th>Trạng thái</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {previewData.items.map((item, idx) => (
+                    <tr key={item.itemIndex || idx}>
+                      <td>{idx + 1}</td>
+                      <td className="question-cell">
+                        <div>{item.content}</div>
+                        {item.errors && item.errors.length > 0 && (
+                          <div style={{ color: 'var(--danger)', fontSize: '0.8rem', marginTop: '4px' }}>
+                            {item.errors.join('; ')}
+                          </div>
+                        )}
+                      </td>
+                      <td>{typeLabel(item.type)}</td>
+                      <td><Badge tone={item.difficulty === 'HARD' ? 'danger' : item.difficulty === 'MEDIUM' ? 'warning' : 'success'}>{difficultyLabel(item.difficulty)}</Badge></td>
+                      <td>
+                        <Badge tone={item.valid ? 'success' : 'danger'}>
+                          {item.valid ? 'Hợp lệ' : 'Lỗi'}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        <div className="modal-actions" style={{ marginTop: '12px' }}>
+          <button type="button" className="button secondary" onClick={onClose}>
+            Đóng
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 export default function QuestionsPage() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'ADMIN'
@@ -116,6 +338,7 @@ export default function QuestionsPage() {
   const [editing, setEditing] = useState(null)
   const [viewing, setViewing] = useState(null)
   const [deleting, setDeleting] = useState(null)
+  const [isImportOpen, setIsImportOpen] = useState(false)
   const { notify } = useToast()
   const queryClient = useQueryClient()
   const subjects = useQuery({ queryKey: ['subjects'], queryFn: api.getSubjects })
@@ -129,10 +352,24 @@ export default function QuestionsPage() {
   if (subjects.isError || chapters.isError) return <ErrorState error={subjects.error || chapters.error} onRetry={() => { subjects.refetch(); chapters.refetch() }} />
 
   return <>
-    <PageHeader title="Ngân hàng câu hỏi" description="Tìm kiếm, phân loại và quản lý câu hỏi trắc nghiệm hoặc tự luận." action={<button className="button" onClick={() => setEditing({})}>Thêm câu hỏi</button>} />
+    <PageHeader
+      title="Ngân hàng câu hỏi"
+      description="Tìm kiếm, phân loại và quản lý câu hỏi trắc nghiệm hoặc tự luận."
+      action={
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button type="button" className="button secondary" onClick={() => setIsImportOpen(true)}>
+            Nhập từ file (Word / PDF)
+          </button>
+          <button type="button" className="button" onClick={() => setEditing({})}>
+            Thêm câu hỏi
+          </button>
+        </div>
+      }
+    />
     <div className="toolbar multi"><label className="search-field">Tìm nội dung<input value={filters.search} onChange={(event) => setFilter('search', event.target.value)} placeholder="Nhập nội dung câu hỏi" /></label><label>Môn học<select value={filters.subjectId} onChange={(event) => setFilter('subjectId', event.target.value)}><option value="">Tất cả</option>{subjects.data.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}</select></label><label>Chương<select value={filters.chapterId} onChange={(event) => setFilter('chapterId', event.target.value)}><option value="">Tất cả</option>{filteredChapters.map((chapter) => <option key={chapter.id} value={chapter.id}>{chapter.name}</option>)}</select></label><label>Độ khó<select value={filters.difficulty} onChange={(event) => setFilter('difficulty', event.target.value)}><option value="">Tất cả</option>{DIFFICULTIES.map((difficulty) => <option key={difficulty.value} value={difficulty.value}>{difficulty.label}</option>)}</select></label><label>Loại<select value={filters.type} onChange={(event) => setFilter('type', event.target.value)}><option value="">Tất cả</option>{QUESTION_TYPES.map((questionType) => <option key={questionType.value} value={questionType.value}>{questionType.label}</option>)}</select></label></div>
     {questions.isLoading ? <LoadingState /> : questions.isError ? <ErrorState error={questions.error} onRetry={questions.refetch} /> : !questions.data.content.length ? <EmptyState /> : <><div className="table-wrap"><table><thead><tr><th>Nội dung</th><th>Chương</th><th>Độ khó</th><th>Loại</th><th>Thao tác</th></tr></thead><tbody>{questions.data.content.map((item) => { const chapter = chapters.data.find((candidate) => candidate.id === item.chapterId); return <tr key={item.id}><td className="question-cell">{item.content}</td><td>{chapter?.name || '—'}</td><td><Badge tone={item.difficulty === 'HARD' ? 'danger' : item.difficulty === 'MEDIUM' ? 'warning' : 'success'}>{difficultyLabel(item.difficulty)}</Badge></td><td>{typeLabel(item.type)}</td><td><div className="table-actions"><button className="text-button" onClick={() => setViewing(item)}>Xem</button>{(isAdmin || item.teacherId === user?.id) && <><button className="text-button" onClick={() => setEditing(item)}>Sửa</button><button className="text-button danger-text" onClick={() => setDeleting(item)}>Xóa</button></>}</div></td></tr> })}</tbody></table></div><Pagination page={questions.data.page} totalPages={questions.data.totalPages} onChange={(page) => setFilter('page', page)} /></>}
     {editing && <QuestionForm item={editing.id ? editing : null} subjects={subjects.data} allChapters={chapters.data} onClose={() => setEditing(null)} />}
+    {isImportOpen && <QuestionImportModal subjects={subjects.data} allChapters={chapters.data} onClose={() => setIsImportOpen(false)} />}
     {viewing && (() => { const chapter = chapters.data.find((candidate) => candidate.id === viewing.chapterId); return <QuestionDetail item={viewing} chapter={chapter} subject={subjects.data.find((subject) => subject.id === chapter?.subjectId)} onClose={() => setViewing(null)} /> })()}
     {deleting && <ConfirmModal message="Xóa câu hỏi này khỏi ngân hàng?" onClose={() => setDeleting(null)} onConfirm={() => deleteMutation.mutate(deleting.id)} busy={deleteMutation.isPending} />}
   </>

@@ -35,4 +35,9 @@ public interface QuestionService {
     List<QuestionAvailabilityResponse> getAvailability(
             Integer subjectId
     );
+
+    List<QuestionAvailabilityResponse> getAvailability(
+            Integer subjectId,
+            String examType
+    );
 }

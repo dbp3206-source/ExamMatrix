@@ -2,12 +2,15 @@ package com.exammatrix.backend.controller;
 
 import com.exammatrix.backend.dto.request.ChangePasswordRequest;
 import com.exammatrix.backend.dto.request.LoginRequest;
+import com.exammatrix.backend.dto.request.StudentRegisterRequest;
 import com.exammatrix.backend.dto.request.UpdateProfileRequest;
 import com.exammatrix.backend.dto.response.AuthResponse;
 import com.exammatrix.backend.dto.response.UserResponse;
 import com.exammatrix.backend.service.AuthService;
+import com.exammatrix.backend.service.StudentAuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,10 +19,16 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class AuthController {
     private final AuthService authService;
+    private final StudentAuthService studentAuthService;
 
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(authService.login(request));
+    }
+
+    @PostMapping("/register/student")
+    public ResponseEntity<AuthResponse> registerStudent(@Valid @RequestBody StudentRegisterRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(studentAuthService.registerStudent(request));
     }
 
     @GetMapping("/me")
