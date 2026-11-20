@@ -18,8 +18,11 @@ export const normalizeError = (error) => {
   const serverMessage = error?.response?.data?.message
   const status = error?.response?.status ?? error?.status
   const fallback = status ? HTTP_STATUS_FALLBACKS[status] : null
+  const timedOut = error?.code === 'ECONNABORTED' || error?.code === 'ETIMEDOUT'
   return {
-    message: serverMessage || fallback || error?.message || 'Đã có lỗi xảy ra',
+    message: serverMessage || fallback || (timedOut
+      ? 'Máy chủ phản hồi chậm. Vui lòng đợi một lúc rồi thử lại.'
+      : error?.message || 'Đã có lỗi xảy ra'),
     fieldErrors: error?.response?.data?.fieldErrors || error?.fieldErrors || {},
   }
 }

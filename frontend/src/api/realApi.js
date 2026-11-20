@@ -1,11 +1,13 @@
 import http from './httpClient'
 
 const unwrap = (request) => request.then(({ data }) => data)
+const authTimeout = 45_000
+const googleRequestConfig = { timeout: authTimeout, withCredentials: true }
 
 export const realApi = {
-  login: (body) => unwrap(http.post('/auth/login', body)),
-  googleStudentChallenge: () => unwrap(http.post('/auth/google/student/challenge', null, { withCredentials: true })),
-  googleStudentLogin: (credential) => unwrap(http.post('/auth/google/student', { credential }, { withCredentials: true })),
+  login: (body) => unwrap(http.post('/auth/login', body, { timeout: authTimeout })),
+  googleStudentChallenge: () => unwrap(http.post('/auth/google/student/challenge', null, googleRequestConfig)),
+  googleStudentLogin: (credential) => unwrap(http.post('/auth/google/student', { credential }, googleRequestConfig)),
   me: () => unwrap(http.get('/auth/me')),
   logout: () => unwrap(http.post('/auth/logout')),
   updateProfile: (body) => unwrap(http.patch('/auth/profile', body)),
