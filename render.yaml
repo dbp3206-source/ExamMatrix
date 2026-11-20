@@ -1,0 +1,42 @@
+services:
+  - type: web
+    name: exammatrix-dbp3206
+    runtime: docker
+    plan: free
+    region: singapore
+    branch: main
+    dockerfilePath: ./Dockerfile.render
+    healthCheckPath: /healthz
+    envVars:
+      - key: RENDER_DATABASE_URL
+        fromDatabase:
+          name: exammatrix-db
+          property: connectionString
+      - key: DB_USERNAME
+        fromDatabase:
+          name: exammatrix-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: exammatrix-db
+          property: password
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JAVA_TOOL_OPTIONS
+        value: "-XX:MaxRAMPercentage=45 -XX:ActiveProcessorCount=2 -XX:+ExitOnOutOfMemoryError"
+      - key: TZ
+        value: Asia/Ho_Chi_Minh
+      - key: BOOTSTRAP_ADMIN_ENABLED
+        value: "true"
+      - key: BOOTSTRAP_ADMIN_USERNAME
+        value: exam-admin
+      - key: BOOTSTRAP_ADMIN_EMAIL
+        sync: false
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        generateValue: true
+databases:
+  - name: exammatrix-db
+    databaseName: exam_matrix
+    region: singapore
+    plan: free
+    ipAllowList: []

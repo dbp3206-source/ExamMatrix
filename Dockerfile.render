@@ -1,0 +1,35 @@
+FROM node:24-alpine AS frontend
+WORKDIR /app
+RUN corepack enable
+COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml frontend/.npmrc ./
+RUN corepack prepare pnpm@11.25.0 --activate && pnpm install --frozen-lockfile
+COPY frontend/ ./
+ENV VITE_API_BASE_URL=/api VITE_USE_MOCK_API=false
+RUN pnpm build
+
+FROM eclipse-temurin:21-jdk-alpine AS backend
+WORKDIR /app
+COPY backend/.mvn/ .mvn/
+COPY backend/mvnw backend/pom.xml ./
+COPY backend/src/ src/
+COPY database/ /schema/
+RUN sed -i 's/\r$//' mvnw && chmod +x mvnw \
+    && mkdir -p src/main/resources/db/render \
+    && for migration in /schema/V*.sql; do \
+         case "$migration" in */V4__*) continue ;; esac; \
+         sed -E '/^[[:space:]]*(BEGIN|COMMIT);[[:space:]]*$/d' "$migration" \
+           > "src/main/resources/db/render/${migration##*/}"; \
+       done \
+    && ./mvnw -B -DskipTests package
+
+FROM eclipse-temurin:21-jre-alpine
+RUN apk add --no-cache bash gettext nginx tini \
+    && rm -f /etc/nginx/http.d/default.conf
+WORKDIR /app
+COPY --from=backend /app/target/*.jar app.jar
+COPY --from=frontend /app/dist /var/www/exammatrix
+COPY deploy/render/nginx.conf.template deploy/render/start.sh ./
+RUN sed -i 's/\r$//' start.sh nginx.conf.template
+ENV SPRING_PROFILES_ACTIVE=render
+EXPOSE 10000
+ENTRYPOINT ["/sbin/tini", "--", "/bin/bash", "/app/start.sh"]

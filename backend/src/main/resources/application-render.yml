@@ -1,0 +1,24 @@
+server:
+  address: 127.0.0.1
+  port: 8081
+  tomcat:
+    threads:
+      max: 24
+      min-spare: 2
+
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 5
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    locations: classpath:db/render
+
+app:
+  cors:
+    allowed-origins: ${RENDER_EXTERNAL_URL:}
+  google:
+    secure-cookie: true

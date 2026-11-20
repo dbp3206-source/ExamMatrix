@@ -16,6 +16,18 @@ Dự án ứng dụng hỗ trợ giáo viên xây dựng ma trận đề thi, si
 
 Schema thực tế được ghi trong `database/`. Trước khi đưa bản mới lên PostgreSQL đang có dữ liệu, cập nhật schema theo phiên bản và chạy với `DB_DDL_AUTO=validate` sau khi xác nhận cài đặt. Chế độ phát triển mặc định là `update`.
 
+### Demo công khai trên Render
+
+[Mở cấu hình triển khai Exam Matrix trên Render](https://render.com/deploy?repo=https%3A%2F%2Fgithub.com%2Fdbp3206-source%2FExamMatrix%2Ftree%2Fmain)
+
+Tạo **Blueprint** trong Render Dashboard, kết nối repo GitHub và chọn nhánh `main`. Blueprint dùng `render.yaml` để tạo web service HTTPS cùng PostgreSQL ở Singapore. Khi được hỏi, nhập `BOOTSTRAP_ADMIN_EMAIL` của người quản trị. Render sinh mật khẩu ban đầu và khóa JWT; lấy mật khẩu trong **Environment** của web service, đăng nhập bằng `exam-admin` và đổi mật khẩu trong hồ sơ.
+
+`Dockerfile.render` build frontend và backend. Nginx phục vụ giao diện và chuyển `/api/` tới backend nội bộ. Kiểm tra `/healthz`; endpoint này chỉ báo sẵn sàng khi backend kết nối được database. Flyway khởi tạo database mới từ các migration, bỏ qua dữ liệu và tài khoản demo trong `V4__seed_data.sql`. Dữ liệu của máy phát triển được lưu riêng. Tạo giáo viên, môn, lớp và đề demo trên bản deploy nếu cần minh họa đầy đủ.
+
+Để bật Google cho học sinh, lấy URL HTTPS chính xác trên trang web service. Thêm origin đó vào **Authorized JavaScript origins** của OAuth Web Client trong Google Cloud, rồi đặt `GOOGLE_CLIENT_ID` trong **Environment** của web service và deploy lại. Luồng này dùng Google Identity Services và cookie cùng origin. Kiểm tra màn hình đồng ý của Google ở chế độ phù hợp với đối tượng sử dụng. Học sinh có thể đăng ký bằng tài khoản Exam Matrix trong thời gian chờ cấu hình Google.
+
+Backend gói Free có thể ngủ sau 15 phút không có yêu cầu. PostgreSQL Free hết hạn sau 30 ngày. [Giới hạn gói Free của Render](https://render.com/docs/free).
+
 1. `database/V2__student_exam_flow.sql`:
    - Bổ sung vai trò `STUDENT`.
    - Bổ sung trường `reference_answer` cho bảng `questions` (phục vụ câu hỏi tự luận `ESSAY`).
