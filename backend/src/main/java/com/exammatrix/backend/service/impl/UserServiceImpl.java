@@ -140,7 +140,7 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public UserResponse updateUserById(UUID id, UpdateUserRequest request) {
-        User user = findUserById(id);
+        User user = findUserForUpdate(id);
 
         String email = request
             .getEmail()
@@ -162,7 +162,14 @@ public class UserServiceImpl implements UserService {
 
         if (request.getRole() != null && !request.getRole().isBlank()) {
             Role role = findRoleByName(request.getRole());
-            user.setRole(role);
+            if (!role.getId().equals(user.getRole().getId())) {
+                if (user.getGoogleSubject() != null) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Không thể đổi vai trò của tài khoản đăng nhập bằng Google");
+                }
+                user.setRole(role);
+                user.invalidateSessions();
+            }
         }
 
         User savedUser = userRepository.save(user);
@@ -173,9 +180,12 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public UserResponse updateUserStatus(UUID id, UpdateUserStatusRequest request) {
-        User user = findUserById(id);
+        User user = findUserForUpdate(id);
 
-        user.setStatus(request.getStatus());
+        if (user.getStatus() != request.getStatus()) {
+            user.setStatus(request.getStatus());
+            user.invalidateSessions();
+        }
 
         User savedUser = userRepository.save(user);
 
@@ -193,6 +203,11 @@ public class UserServiceImpl implements UserService {
         }
 
         return result.get();
+    }
+
+    private User findUserForUpdate(UUID id) {
+        return userRepository.findByIdForUpdate(id).orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy người dùng có id " + id));
     }
 
     private Role findRoleByName(String roleName) {

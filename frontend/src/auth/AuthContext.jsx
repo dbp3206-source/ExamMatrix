@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/service'
+import { disableGoogleAutoSelect } from '../utils/googleIdentity'
+import { clearAllEssayDrafts } from '../utils/essayDraftStorage'
 
 const AuthContext = createContext(null)
 const TOKEN_KEY = 'exam_access_token'
@@ -23,6 +25,15 @@ export function AuthProvider({ children }) {
     if (user) localStorage.setItem(USER_KEY, JSON.stringify(user))
   }, [user])
 
+  const clearSessionOnly = useCallback(async () => {
+    await queryClient.cancelQueries()
+    clearAllEssayDrafts()
+    localStorage.removeItem('exam_access_token')
+    localStorage.removeItem('exam_current_user')
+    setToken(null)
+    queryClient.clear()
+  }, [queryClient])
+
   useEffect(() => {
     const syncSession = (event) => {
       if (event.key !== TOKEN_KEY && event.key !== null) return
@@ -30,12 +41,21 @@ export function AuthProvider({ children }) {
       queryClient.clear()
       setToken(localStorage.getItem(TOKEN_KEY))
     }
+    const handleInvalidated = () => {
+      clearSessionOnly()
+    }
     window.addEventListener('storage', syncSession)
-    return () => window.removeEventListener('storage', syncSession)
-  }, [queryClient])
+    window.addEventListener('exam:auth-invalidated', handleInvalidated)
+    return () => {
+      window.removeEventListener('storage', syncSession)
+      window.removeEventListener('exam:auth-invalidated', handleInvalidated)
+    }
+  }, [clearSessionOnly, queryClient])
 
-  const login = useCallback(async (credentials) => {
-    const result = await api.login(credentials)
+  const establishSession = useCallback(async (result) => {
+    if (!result?.accessToken || !result?.user) {
+      throw new Error('Phản hồi đăng nhập từ máy chủ không hợp lệ')
+    }
     await queryClient.cancelQueries()
     queryClient.clear()
     localStorage.setItem(TOKEN_KEY, result.accessToken)
@@ -45,15 +65,22 @@ export function AuthProvider({ children }) {
     return result.user
   }, [queryClient])
 
+  const login = useCallback(async (credentials) => {
+    const result = await api.login(credentials)
+    return establishSession(result)
+  }, [establishSession])
+
+  const loginWithGoogle = useCallback(async (credential) => {
+    const result = await api.googleStudentLogin(credential)
+    return establishSession(result)
+  }, [establishSession])
+
   const logout = useCallback(async () => {
     const request = api.logout().catch(() => undefined)
-    await queryClient.cancelQueries()
-    localStorage.removeItem(TOKEN_KEY)
-    localStorage.removeItem(USER_KEY)
-    setToken(null)
-    queryClient.clear()
+    disableGoogleAutoSelect()
+    await clearSessionOnly()
     await request
-  }, [queryClient])
+  }, [clearSessionOnly])
 
   const updateLocalUser = useCallback((next) => {
     localStorage.setItem(USER_KEY, JSON.stringify(next))
@@ -61,12 +88,17 @@ export function AuthProvider({ children }) {
   }, [queryClient, token])
 
   const value = useMemo(() => ({
-    user, login, logout, updateLocalUser,
+    user,
+    login,
+    loginWithGoogle,
+    logout,
+    clearSessionOnly,
+    updateLocalUser,
     isAuthenticated: Boolean(token && user),
     isChecking: Boolean(token) && session.isPending,
     authError: token ? session.error : null,
     retrySession: session.refetch,
-  }), [user, login, logout, updateLocalUser, token, session.isPending, session.error, session.refetch])
+  }), [user, login, loginWithGoogle, logout, clearSessionOnly, updateLocalUser, token, session.isPending, session.error, session.refetch])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 

@@ -2,13 +2,16 @@ package com.exammatrix.backend.controller;
 
 import com.exammatrix.backend.dto.request.ExamMatrixRequest;
 import com.exammatrix.backend.dto.request.GenerateExamPapersRequest;
+import com.exammatrix.backend.dto.request.GenerationAdviceRequest;
 import com.exammatrix.backend.dto.response.ExamMatrixResponse;
 import com.exammatrix.backend.dto.response.ExamPaperDetailResponse;
+import com.exammatrix.backend.dto.response.GenerationAdviceResponse;
 import com.exammatrix.backend.dto.response.PageResponse;
 import com.exammatrix.backend.entity.enums.ExamType;
 import com.exammatrix.backend.service.ExamGenerationService;
 import com.exammatrix.backend.service.ExamMatrixService;
 import com.exammatrix.backend.service.ExamPaperService;
+import com.exammatrix.backend.service.GenerationAdviceService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -25,6 +28,7 @@ public class ExamMatrixController {
     private final ExamMatrixService examMatrixService;
     private final ExamPaperService examPaperService;
     private final ExamGenerationService examGenerationService;
+    private final GenerationAdviceService generationAdviceService;
 
     @GetMapping
     public ResponseEntity<PageResponse<ExamMatrixResponse>> getAllExamMatrices(
@@ -82,6 +86,14 @@ public class ExamMatrixController {
         examMatrixService.deleteExamMatrix(id);
 
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/generation-advice")
+    public ResponseEntity<GenerationAdviceResponse> getGenerationAdvice(
+            @PathVariable UUID id,
+            @Valid @RequestBody GenerationAdviceRequest request
+    ) {
+        return ResponseEntity.ok(generationAdviceService.getGenerationAdvice(id, request));
     }
 
     @PostMapping("/{id}/generate")

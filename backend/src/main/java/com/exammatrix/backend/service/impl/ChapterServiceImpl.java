@@ -5,9 +5,12 @@ import com.exammatrix.backend.dto.response.ChapterResponse;
 import com.exammatrix.backend.entity.Chapter;
 import com.exammatrix.backend.entity.Subject;
 import com.exammatrix.backend.repository.ChapterRepository;
+import com.exammatrix.backend.repository.ExamMatrixConfigRepository;
+import com.exammatrix.backend.repository.QuestionRepository;
 import com.exammatrix.backend.repository.SubjectRepository;
 import com.exammatrix.backend.service.ChapterService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -24,6 +27,8 @@ import java.util.Optional;
 public class ChapterServiceImpl implements ChapterService {
     private final SubjectRepository subjectRepository;
     private final ChapterRepository chapterRepository;
+    private final QuestionRepository questionRepository;
+    private final ExamMatrixConfigRepository examMatrixConfigRepository;
 
     @Override
     public List<ChapterResponse> getAllChapters(Integer subjectId) {
@@ -87,6 +92,12 @@ public class ChapterServiceImpl implements ChapterService {
     public ChapterResponse updateChapterById(Integer id, ChapterRequest request) {
         Chapter chapter = findChapterById(id);
 
+        if (!chapter.getSubject().getId().equals(request.getSubjectId())
+                && (questionRepository.existsByChapter_Id(id) || examMatrixConfigRepository.existsByChapter_Id(id))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Không thể chuyển chương đã có câu hỏi hoặc được dùng trong ma trận sang môn khác");
+        }
+
         Subject subject = findSubjectById(request.getSubjectId());
 
         boolean orderIndexExisted = chapterRepository.existsBySubjectIdAndOrderIndexAndIdNot(
@@ -116,7 +127,29 @@ public class ChapterServiceImpl implements ChapterService {
     public void deleteChapterById(Integer id) {
         Chapter chapter = findChapterById(id);
 
-        chapterRepository.delete(chapter);
+        if (questionRepository.existsByChapter_Id(id)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Không thể xóa chương đang có câu hỏi trong ngân hàng"
+            );
+        }
+
+        if (examMatrixConfigRepository.existsByChapter_Id(id)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Không thể xóa chương đang được dùng trong ma trận đề"
+            );
+        }
+
+        try {
+            chapterRepository.delete(chapter);
+            chapterRepository.flush();
+        } catch (DataIntegrityViolationException exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Không thể xóa chương đang được sử dụng"
+            );
+        }
     }
 
     private Chapter findChapterById(Integer id) {

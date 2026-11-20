@@ -6,4 +6,5 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface ExamMatrixConfigRepository extends JpaRepository<ExamMatrixConfig, Integer> {
+    boolean existsByChapter_Id(Integer chapterId);
 }

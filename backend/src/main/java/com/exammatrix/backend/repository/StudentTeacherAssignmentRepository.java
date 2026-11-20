@@ -17,6 +17,21 @@ public interface StudentTeacherAssignmentRepository extends JpaRepository<Studen
     @EntityGraph(attributePaths = {"teacher", "teacherClass"})
     Optional<StudentTeacherAssignment> findFirstByStudent_IdOrderByRequestedAtDesc(UUID studentId);
 
+    @EntityGraph(attributePaths = {"teacher", "teacherClass"})
+    java.util.List<StudentTeacherAssignment> findByStudent_IdOrderByRequestedAtDesc(UUID studentId);
+
+    @EntityGraph(attributePaths = {"teacher", "teacherClass"})
+    Optional<StudentTeacherAssignment> findFirstByStudent_IdAndStatusOrderByRequestedAtDesc(
+            UUID studentId,
+            StudentAssignmentStatus status
+    );
+
+    @EntityGraph(attributePaths = {"teacher", "teacherClass"})
+    java.util.List<StudentTeacherAssignment> findByStudent_IdAndStatus(
+            UUID studentId,
+            StudentAssignmentStatus status
+    );
+
     Optional<StudentTeacherAssignment> findFirstByStudent_IdAndStatusIn(
             UUID studentId,
             Collection<StudentAssignmentStatus> statuses
@@ -33,6 +48,13 @@ public interface StudentTeacherAssignmentRepository extends JpaRepository<Studen
     );
 
     boolean existsByStudent_IdAndTeacher_IdAndStatus(
+            UUID studentId,
+            UUID teacherId,
+            StudentAssignmentStatus status
+    );
+
+    @EntityGraph(attributePaths = {"teacherClass"})
+    Optional<StudentTeacherAssignment> findFirstByStudent_IdAndTeacher_IdAndStatusOrderByReviewedAtDesc(
             UUID studentId,
             UUID teacherId,
             StudentAssignmentStatus status

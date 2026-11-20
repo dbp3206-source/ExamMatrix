@@ -1,34 +1,49 @@
-import { useEffect, useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '../api/service'
-import { Badge, EmptyState, ErrorState, LoadingState, Modal, PageHeader, Pagination } from '../components/UI'
-import { requestStatusMeta } from '../constants'
-import { useToast } from '../components/ToastProvider'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Check, Copy, Lock, Settings2, ShieldBan, UserCheck, Users, X } from 'lucide-react'
+import { toast } from 'sonner'
+import { api } from '@/api/service'
+import { requestStatusMeta } from '@/constants'
+import { formatDate } from '@/utils'
+import { validateBcryptPasswordLength } from '@/utils/passwordValidation'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { DataTable } from '@/components/ui/data-table'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Textarea } from '@/components/ui/textarea'
+import { EmptyState, ErrorState, FieldError, LoadingState, PageHeader, Pagination } from '@/components/common/StateFeedback'
 
 export default function TeacherStudentRequestsPage() {
   const queryClient = useQueryClient()
-  const { showToast } = useToast()
   const [page, setPage] = useState(0)
   const size = 10
-  const [statusFilter, setStatusFilter] = useState('PENDING')
 
-  // Review modal state: { id, studentName, action: 'APPROVED' | 'REJECTED' | 'REVOKED' }
+  const [statusFilter, setStatusFilter] = useState('')
+
   const [reviewTarget, setReviewTarget] = useState(null)
   const [decisionNote, setDecisionNote] = useState('')
 
-  // Class edit modal state
   const [isEditClassOpen, setIsEditClassOpen] = useState(false)
   const [classNameInput, setClassNameInput] = useState('')
   const [classCodeInput, setClassCodeInput] = useState('')
   const [classPasswordInput, setClassPasswordInput] = useState('')
+  const [classFormError, setClassFormError] = useState('')
+  const [classFieldErrors, setClassFieldErrors] = useState({})
+  const classPasswordRef = useRef(null)
 
   useEffect(() => {
-    document.title = 'Duyệt học sinh | Exam Matrix'
+    document.title = 'Duyệt học sinh & Lớp học | Exam Matrix'
   }, [])
 
   const {
     data: classData,
     isLoading: isClassLoading,
+    error: classError,
     refetch: refetchClass,
   } = useQuery({
     queryKey: ['teacher', 'class'],
@@ -42,22 +57,56 @@ export default function TeacherStudentRequestsPage() {
     }
   }, [classData])
 
+  const openClassModal = (focusPassword = false) => {
+    setClassFormError('')
+    setClassFieldErrors({})
+    setIsEditClassOpen(true)
+    if (focusPassword) {
+      window.setTimeout(() => classPasswordRef.current?.focus(), 60)
+    }
+  }
+
   const updateClassMutation = useMutation({
     mutationFn: (body) => api.updateTeacherClass(body),
-    onSuccess: () => {
-      showToast('Cập nhật thông tin lớp học thành công')
+    onSuccess: (updated) => {
+      toast.success(
+        updated?.hasPassword
+          ? 'Đã lưu thông tin và bật mật khẩu tham gia lớp'
+          : 'Đã cập nhật thông tin lớp học (lớp chưa có mật khẩu tham gia)'
+      )
       setIsEditClassOpen(false)
       setClassPasswordInput('')
+      setClassFormError('')
+      setClassFieldErrors({})
+      queryClient.setQueryData(['teacher', 'class'], updated)
       refetchClass()
     },
     onError: (err) => {
-      showToast(err.message || 'Không thể cập nhật thông tin lớp học', 'error')
+      const serverFieldErrors = err?.fieldErrors || err?.response?.data?.fieldErrors || {}
+      const normalized = {
+        ...(serverFieldErrors.name ? { name: serverFieldErrors.name } : {}),
+        ...(serverFieldErrors.classCode ? { classCode: serverFieldErrors.classCode } : {}),
+        ...(serverFieldErrors.password || serverFieldErrors.joinPassword
+          ? { joinPassword: serverFieldErrors.password || serverFieldErrors.joinPassword }
+          : {}),
+      }
+      if (Object.keys(normalized).length > 0) {
+        setClassFieldErrors(normalized)
+        setClassFormError('')
+        toast.error('Vui lòng kiểm tra lại các trường bị lỗi trong biểu mẫu lớp học.')
+      } else {
+        const message = err.message || 'Không thể cập nhật thông tin lớp học'
+        setClassFieldErrors({})
+        setClassFormError(message)
+        toast.error(message)
+      }
     },
   })
 
   const {
     data: requestsData,
     isLoading,
+    isFetching,
     error,
     refetch,
   } = useQuery({
@@ -70,36 +119,33 @@ export default function TeacherStudentRequestsPage() {
       }),
   })
 
+  const lastRequestPage = requestsData == null ? null : Math.max(0, requestsData.totalPages - 1)
+  useEffect(() => {
+    if (lastRequestPage != null && !isFetching && page > lastRequestPage) {
+      setPage(lastRequestPage)
+    }
+  }, [isFetching, lastRequestPage, page])
+
   const reviewMutation = useMutation({
     mutationFn: ({ requestId, status, note }) =>
       api.reviewStudentRequest(requestId, {
         status,
         decisionNote: note || null,
       }),
-    onSuccess: (data, vars) => {
-      if (vars.status === 'APPROVED') {
-        showToast('Đã cấp quyền học sinh thành công')
-      } else if (vars.status === 'REVOKED') {
-        showToast('Đã thu hồi quyền học sinh')
-      } else {
-        showToast('Đã từ chối yêu cầu của học sinh')
-      }
+    onSuccess: (_, vars) => {
+      if (vars.status === 'APPROVED') toast.success('Đã cấp quyền học sinh thành công')
+      else if (vars.status === 'REVOKED') toast.success('Đã thu hồi quyền học sinh')
+      else toast.success('Đã từ chối yêu cầu của học sinh')
       setReviewTarget(null)
       setDecisionNote('')
       queryClient.invalidateQueries({ queryKey: ['teacher', 'student-requests'] })
       refetchClass()
     },
-    onError: (err) => {
-      showToast(err.message || 'Không thể xử lý yêu cầu', 'error')
-    },
+    onError: (err) => toast.error(err.message || 'Không thể xử lý yêu cầu'),
   })
 
   const openReview = (item, action) => {
-    setReviewTarget({
-      id: item.id,
-      studentName: item.studentName,
-      action,
-    })
+    setReviewTarget({ id: item.id, studentName: item.studentName, action })
     setDecisionNote('')
   }
 
@@ -113,297 +159,412 @@ export default function TeacherStudentRequestsPage() {
     })
   }
 
+  const columns = useMemo(
+    () => [
+      {
+        accessorKey: 'studentName',
+        header: 'Học sinh',
+        cell: ({ row }) => (
+          <div>
+            <div className="font-bold text-slate-900">{row.original.studentName}</div>
+            <div className="text-xs text-slate-500">{row.original.studentEmail}</div>
+          </div>
+        ),
+      },
+      {
+        accessorKey: 'requestedAt',
+        header: 'Thời gian gửi',
+        cell: ({ row }) => <span className="text-xs text-slate-600">{formatDate(row.original.requestedAt)}</span>,
+      },
+      {
+        accessorKey: 'status',
+        header: 'Trạng thái',
+        cell: ({ row }) => {
+          const meta = requestStatusMeta(row.original.status)
+          return <Badge variant={meta.tone}>{meta.label}</Badge>
+        },
+      },
+      {
+        accessorKey: 'decisionNote',
+        header: 'Ghi chú',
+        cell: ({ row }) => <span className="text-xs text-slate-600">{row.original.decisionNote || '—'}</span>,
+      },
+      {
+        id: 'actions',
+        header: 'Thao tác',
+        meta: { headClassName: 'text-right', cellClassName: 'text-right' },
+        cell: ({ row }) => {
+          const item = row.original
+          return (
+            <div className="inline-flex items-center justify-end gap-1.5">
+              {item.status === 'PENDING' && (
+                <>
+                  <Button size="sm" variant="teal" onClick={() => openReview(item, 'APPROVED')}>
+                    <Check className="h-3.5 w-3.5" />
+                    Phê duyệt
+                  </Button>
+                  <Button size="sm" variant="destructive" onClick={() => openReview(item, 'REJECTED')}>
+                    <X className="h-3.5 w-3.5" />
+                    Từ chối
+                  </Button>
+                </>
+              )}
+              {item.status === 'APPROVED' && (
+                <Button size="sm" variant="destructive" onClick={() => openReview(item, 'REVOKED')}>
+                  <ShieldBan className="h-3.5 w-3.5" />
+                  Thu hồi quyền
+                </Button>
+              )}
+              {(item.status === 'REJECTED' || item.status === 'REVOKED') && (
+                <Button size="sm" variant="outline" onClick={() => openReview(item, 'APPROVED')}>
+                  <UserCheck className="h-3.5 w-3.5" />
+                  Cấp lại quyền
+                </Button>
+              )}
+            </div>
+          )
+        },
+      },
+    ],
+    []
+  )
+
+  const requestsList = requestsData?.content || []
+
   return (
-    <div>
+    <div className="space-y-5" data-role="teacher">
       <PageHeader
-        title="Duyệt yêu cầu học sinh"
-        description="Quản lý và phê duyệt danh sách học sinh đăng ký tham gia lớp học và làm bài thi."
+        accent="amber"
+        eyebrow="QUẢN LÝ LỚP HỌC & DUYỆT HỌC SINH"
+        title="Lớp học & Duyệt học sinh"
+        description="Quản lý mã lớp, mật khẩu tham gia và theo dõi danh sách học sinh được cấp quyền làm đề riêng của lớp."
       />
 
-      {/* Thông tin lớp học */}
-      <section className="panel" style={{ marginBottom: '20px' }}>
-        <div className="panel-heading">
-          <h2>Thông tin lớp học & Phòng thi</h2>
-          <button
-            type="button"
-            className="button secondary small"
-            onClick={() => setIsEditClassOpen(true)}
-          >
-            Thiết lập mã / mật khẩu lớp
-          </button>
-        </div>
-        {isClassLoading ? (
-          <p className="muted">Đang tải thông tin lớp học...</p>
-        ) : classData ? (
-          <div className="detail-meta" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
-            <span>
-              Tên lớp học
-              <strong>{classData.name}</strong>
-            </span>
-            <span>
-              Mã tham gia lớp
-              <strong>
-                <code style={{ fontSize: '1rem', background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px' }}>
-                  {classData.classCode}
-                </code>
-              </strong>
-            </span>
-            <span>
-              Số học sinh đã duyệt
-              <strong>{classData.studentCount ?? 0} học sinh</strong>
-            </span>
-            <span>
-              Bảo vệ bằng mật khẩu
-              <Badge tone="success">Đang bật</Badge>
-            </span>
+      <Card className="border-amber-200 bg-white">
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
+          <div>
+            <CardTitle>{classData?.name ? `Lớp: ${classData.name}` : 'Thông tin lớp học'}</CardTitle>
+            <CardDescription>Mỗi tài khoản giáo viên quản lý một lớp học với mã định danh và mật khẩu riêng.</CardDescription>
           </div>
-        ) : (
-          <p className="muted">Chưa có thông tin lớp học</p>
-        )}
-      </section>
-
-      {/* Filter Toolbar */}
-      <div className="toolbar">
-        <label>
-          Trạng thái yêu cầu
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value)
-              setPage(0)
-            }}
+          <Button
+            variant={classData && !classData.hasPassword ? 'amber' : 'outline'}
+            disabled={!classData || Boolean(classError)}
+            onClick={() => openClassModal(!classData?.hasPassword)}
           >
-            <option value="PENDING">Chờ duyệt (PENDING)</option>
-            <option value="APPROVED">Đã duyệt (APPROVED)</option>
-            <option value="REJECTED">Đã từ chối (REJECTED)</option>
-            <option value="REVOKED">Đã thu hồi (REVOKED)</option>
-            <option value="">Tất cả</option>
-          </select>
-        </label>
-      </div>
+            <Settings2 className="h-4 w-4" />
+            {classData && !classData.hasPassword ? 'Đặt mật khẩu lớp ngay' : 'Thiết lập lớp & mật khẩu'}
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {classData && !classData.hasPassword && (
+            <Alert variant="warning" className="items-center justify-between gap-3">
+              <AlertDescription className="space-y-1">
+                <strong className="block text-sm text-amber-950">
+                  Cần đặt mật khẩu lớp trước khi chia sẻ mã cho học sinh
+                </strong>
+                <span className="block text-xs text-amber-900">
+                  Lớp học mới tạo hoặc chưa đổi mật khẩu mặc định có trạng thái chưa mở (<code>hasPassword: false</code>). Học sinh sẽ nhận lỗi &ldquo;lớp chưa mở&rdquo; cho đến khi bạn đặt mật khẩu riêng (khác <code>123456</code>).
+                </span>
+              </AlertDescription>
+              <Button variant="amber" size="sm" className="shrink-0" onClick={() => openClassModal(true)}>
+                Đặt mật khẩu lớp
+              </Button>
+            </Alert>
+          )}
+          {isClassLoading ? (
+            <div className="text-sm text-slate-500">Đang tải thông tin lớp học...</div>
+          ) : classError ? (
+            <ErrorState error={classError} onRetry={refetchClass} />
+          ) : classData ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-lg bg-slate-50 p-3">
+                <div className="text-[11px] font-semibold uppercase text-slate-500">Tên lớp</div>
+                <div className="mt-1 font-bold text-slate-900">{classData.name || '—'}</div>
+              </div>
 
-      {isLoading ? (
-        <LoadingState label="Đang tải danh sách yêu cầu..." />
+              <div className="rounded-lg bg-amber-50/70 p-3">
+                <div className="text-[11px] font-semibold uppercase text-amber-800">Mã tham gia lớp</div>
+                <div className="mt-1 flex items-center gap-2">
+                  <code className="rounded bg-white px-2 py-0.5 text-sm font-extrabold text-amber-900 border border-amber-200">
+                    {classData.classCode}
+                  </code>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    aria-label="Sao chép mã lớp"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(classData.classCode)
+                        if (classData.hasPassword) {
+                          toast.success('Đã sao chép mã lớp')
+                        } else {
+                          toast.warning('Đã sao chép mã lớp. Lưu ý: bạn cần đặt mật khẩu lớp trước khi học sinh có thể tham gia.')
+                        }
+                      } catch {
+                        toast.error('Không sao chép được. Hãy chọn mã lớp đang hiển thị.')
+                      }
+                    }}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                {!classData.hasPassword && (
+                  <p className="mt-1 text-[11px] font-medium text-amber-900">
+                    Đặt mật khẩu trước khi chia sẻ mã này.
+                  </p>
+                )}
+              </div>
+
+              <div className="rounded-lg bg-slate-50 p-3">
+                <div className="text-[11px] font-semibold uppercase text-slate-500">Học sinh đã duyệt</div>
+                <div className="mt-1 flex items-center gap-1.5 font-bold text-slate-900 tabular-nums">
+                  <Users className="h-4 w-4 text-teal-700" />
+                  {classData.studentCount ?? 0} học sinh
+                </div>
+              </div>
+
+              <div className="rounded-lg bg-slate-50 p-3">
+                <div className="text-[11px] font-semibold uppercase text-slate-500">Bảo vệ mật khẩu</div>
+                <div className="mt-1">
+                  <Badge variant={classData.hasPassword ? 'success' : 'warning'}>
+                    <Lock className="h-3 w-3" />
+                    {classData.hasPassword ? 'Đang bật' : 'Chưa đặt mật khẩu'}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Tabs
+        value={statusFilter || 'ALL'}
+        onValueChange={(val) => {
+          setStatusFilter(val === 'ALL' ? '' : val)
+          setPage(0)
+        }}
+      >
+        <TabsList>
+          <TabsTrigger value="ALL">Tất cả</TabsTrigger>
+          <TabsTrigger value="APPROVED">Đã duyệt</TabsTrigger>
+          <TabsTrigger value="PENDING">Chờ duyệt</TabsTrigger>
+          <TabsTrigger value="REJECTED">Đã từ chối</TabsTrigger>
+          <TabsTrigger value="REVOKED">Đã thu hồi</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {isLoading || (lastRequestPage != null && page > lastRequestPage) ? (
+        <LoadingState label="Đang tải danh sách học sinh..." />
       ) : error ? (
         <ErrorState error={error} onRetry={refetch} />
-      ) : !requestsData?.content || requestsData.content.length === 0 ? (
+      ) : requestsList.length === 0 ? (
         <EmptyState
-          title="Không có yêu cầu nào"
-          description="Hiện tại không có yêu cầu nào phù hợp với bộ lọc đã chọn."
+          title="Không có học sinh nào"
+          description="Hiện tại không có bản ghi phù hợp với bộ lọc trạng thái đã chọn."
         />
       ) : (
-        <section className="panel">
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Học sinh</th>
-                  <th>Email</th>
-                  <th>Thời gian gửi</th>
-                  <th>Trạng thái</th>
-                  <th style={{ textAlign: 'right' }}>Thao tác</th>
-                </tr>
-              </thead>
-              <tbody>
-                {requestsData.content.map((item) => {
-                  const meta = requestStatusMeta(item.status)
-                  const isPending = item.status === 'PENDING'
-                  return (
-                    <tr key={item.id}>
-                      <td>
-                        <strong>{item.studentName}</strong>
-                      </td>
-                      <td>{item.studentEmail}</td>
-                      <td>
-                        {item.requestedAt
-                          ? new Date(item.requestedAt).toLocaleString('vi-VN')
-                          : '—'}
-                      </td>
-                      <td>
-                        <Badge tone={meta.tone}>{meta.label}</Badge>
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <div style={{ display: 'inline-flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
-                          {isPending && (
-                            <>
-                              <button
-                                type="button"
-                                className="button small"
-                                onClick={() => openReview(item, 'APPROVED')}
-                              >
-                                Phê duyệt
-                              </button>
-                              <button
-                                type="button"
-                                className="button danger small"
-                                onClick={() => openReview(item, 'REJECTED')}
-                              >
-                                Từ chối
-                              </button>
-                            </>
-                          )}
-                          {item.status === 'APPROVED' && (
-                            <button
-                              type="button"
-                              className="button danger small"
-                              onClick={() => openReview(item, 'REVOKED')}
-                            >
-                              Thu hồi quyền
-                            </button>
-                          )}
-                          {(item.status === 'REJECTED' || item.status === 'REVOKED') && (
-                            <button
-                              type="button"
-                              className="button secondary small"
-                              onClick={() => openReview(item, 'APPROVED')}
-                            >
-                              Cấp lại quyền
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-
+        <>
+          <DataTable columns={columns} data={requestsList} getRowId={(r) => String(r.id)} />
           <Pagination
-            page={requestsData.page || page}
+            page={requestsData.page ?? page}
             totalPages={requestsData.totalPages || 0}
-            onChange={(newPage) => setPage(newPage)}
+            onChange={setPage}
           />
-        </section>
+        </>
       )}
 
-      {/* Review Modal */}
       {reviewTarget && (
-        <Modal
-          title={
-            reviewTarget.action === 'APPROVED'
-              ? `Xác nhận phê duyệt: ${reviewTarget.studentName}`
-              : reviewTarget.action === 'REVOKED'
-              ? `Thu hồi quyền: ${reviewTarget.studentName}`
-              : `Từ chối yêu cầu: ${reviewTarget.studentName}`
-          }
-          onClose={() => setReviewTarget(null)}
-        >
-          <form onSubmit={handleConfirmReview}>
-            <p>
-              {reviewTarget.action === 'APPROVED'
-                ? `Sau khi duyệt, học sinh ${reviewTarget.studentName} sẽ được cấp quyền xem và làm tất cả các đề thi của bạn.`
-                : reviewTarget.action === 'REVOKED'
-                ? `Sau khi thu hồi quyền, học sinh ${reviewTarget.studentName} sẽ không thể xem hoặc làm các đề thi của bạn nữa.`
-                : `Học sinh ${reviewTarget.studentName} sẽ không thể xem hoặc làm đề thi của bạn.`}
-            </p>
-
-            <label>
-              Ghi chú phản hồi cho học sinh (tùy chọn)
-              <textarea
-                rows={3}
-                value={decisionNote}
-                onChange={(e) => setDecisionNote(e.target.value)}
-                placeholder={
-                  reviewTarget.action === 'APPROVED'
-                    ? 'Ví dụ: Đã xác nhận học sinh lớp 12A1...'
-                    : 'Ví dụ: Học sinh không thuộc danh sách lớp...'
-                }
-              />
-            </label>
-
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="button secondary"
-                onClick={() => setReviewTarget(null)}
-              >
-                Hủy
-              </button>
-              <button
-                type="submit"
-                className={`button ${reviewTarget.action === 'REJECTED' || reviewTarget.action === 'REVOKED' ? 'danger' : ''}`}
-                disabled={reviewMutation.isPending}
-              >
-                {reviewMutation.isPending
-                  ? 'Đang xử lý...'
-                  : reviewTarget.action === 'APPROVED'
-                  ? 'Xác nhận duyệt'
+        <Dialog open onOpenChange={(open) => { if (!open && !reviewMutation.isPending) setReviewTarget(null) }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {reviewTarget.action === 'APPROVED'
+                  ? `Cấp quyền học sinh: ${reviewTarget.studentName}`
                   : reviewTarget.action === 'REVOKED'
-                  ? 'Xác nhận thu hồi'
-                  : 'Xác nhận từ chối'}
-              </button>
-            </div>
-          </form>
-        </Modal>
+                    ? `Thu hồi quyền: ${reviewTarget.studentName}`
+                    : `Từ chối yêu cầu: ${reviewTarget.studentName}`}
+              </DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleConfirmReview} className="space-y-4">
+              <p className="text-sm text-slate-600 leading-relaxed">
+                {reviewTarget.action === 'APPROVED'
+                  ? `Sau khi duyệt, học sinh ${reviewTarget.studentName} có thể xem và làm các đề riêng đã phát hành cho lớp.`
+                  : reviewTarget.action === 'REVOKED'
+                    ? `Sau khi thu hồi, học sinh ${reviewTarget.studentName} mất quyền truy cập đề riêng của lớp (vẫn làm được đề công khai).`
+                    : `Học sinh ${reviewTarget.studentName} chưa được tham gia lớp.`}
+              </p>
+
+              <div>
+                <Label htmlFor="rev-note">Ghi chú phản hồi (tùy chọn)</Label>
+                <Textarea
+                  id="rev-note"
+                  rows={3}
+                  value={decisionNote}
+                  onChange={(e) => setDecisionNote(e.target.value)}
+                  placeholder="Nhập lý do hoặc ghi chú cho học sinh..."
+                />
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setReviewTarget(null)} disabled={reviewMutation.isPending}>
+                  Hủy
+                </Button>
+                <Button
+                  type="submit"
+                  variant={reviewTarget.action === 'APPROVED' ? 'teal' : 'destructive'}
+                  disabled={reviewMutation.isPending}
+                >
+                  {reviewMutation.isPending
+                    ? 'Đang xử lý...'
+                    : reviewTarget.action === 'APPROVED'
+                      ? 'Xác nhận duyệt'
+                      : reviewTarget.action === 'REVOKED'
+                        ? 'Xác nhận thu hồi'
+                        : 'Xác nhận từ chối'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       )}
 
-      {/* Edit Class Modal */}
       {isEditClassOpen && (
-        <Modal
-          title="Thiết lập lớp học & Mật khẩu tham gia"
-          onClose={() => setIsEditClassOpen(false)}
-        >
-          <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              updateClassMutation.mutate({
-                name: classNameInput.trim(),
-                classCode: classCodeInput.trim().toUpperCase(),
-                password: classPasswordInput.trim() || undefined,
-              })
-            }}
-          >
-            <label>
-              Tên lớp học
-              <input
-                type="text"
-                required
-                value={classNameInput}
-                onChange={(e) => setClassNameInput(e.target.value)}
-                placeholder="Ví dụ: Lớp Toán 12A1"
-              />
-            </label>
+        <Dialog open onOpenChange={(open) => { if (!open && !updateClassMutation.isPending) setIsEditClassOpen(false) }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Thiết lập lớp học & Mật khẩu tham gia</DialogTitle>
+            </DialogHeader>
+            <form
+              noValidate
+              className="space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault()
+                setClassFormError('')
+                const nextFieldErrors = {}
+                const trimmedName = classNameInput.trim()
+                const trimmedCode = classCodeInput.trim().toUpperCase()
+                const trimmedPass = classPasswordInput.trim()
 
-            <label style={{ marginTop: '12px' }}>
-              Mã tham gia lớp (học sinh dùng để tìm lớp)
-              <input
-                type="text"
-                required
-                value={classCodeInput}
-                onChange={(e) => setClassCodeInput(e.target.value.toUpperCase())}
-                placeholder="Ví dụ: TOAN12A1"
-              />
-            </label>
+                if (!trimmedName) {
+                  nextFieldErrors.name = 'Tên lớp không được để trống'
+                } else if (trimmedName.length > 100) {
+                  nextFieldErrors.name = 'Tên lớp không được vượt quá 100 ký tự'
+                }
 
-            <label style={{ marginTop: '12px' }}>
-              Mật khẩu tham gia mới (để trống nếu giữ nguyên mật khẩu cũ)
-              <input
-                type="password"
-                value={classPasswordInput}
-                onChange={(e) => setClassPasswordInput(e.target.value)}
-                placeholder="Nhập mật khẩu mới để thay đổi"
-              />
-            </label>
+                if (!trimmedCode) {
+                  nextFieldErrors.classCode = 'Mã lớp không được để trống'
+                } else if (trimmedCode.length > 50) {
+                  nextFieldErrors.classCode = 'Mã lớp không được vượt quá 50 ký tự'
+                }
 
-            <div className="modal-actions" style={{ marginTop: '20px' }}>
-              <button
-                type="button"
-                className="button secondary"
-                onClick={() => setIsEditClassOpen(false)}
-              >
-                Hủy
-              </button>
-              <button
-                type="submit"
-                className="button"
-                disabled={updateClassMutation.isPending || !classNameInput.trim() || !classCodeInput.trim()}
-              >
-                {updateClassMutation.isPending ? 'Đang lưu...' : 'Lưu thay đổi'}
-              </button>
-            </div>
-          </form>
-        </Modal>
+                if (!classData?.hasPassword && !trimmedPass) {
+                  nextFieldErrors.joinPassword = 'Vui lòng nhập mật khẩu lớp mới để mở lớp cho học sinh tham gia.'
+                } else if (trimmedPass === '123456') {
+                  nextFieldErrors.joinPassword = 'Hãy đặt mật khẩu lớp khác mật khẩu mặc định cũ (123456).'
+                } else if (trimmedPass) {
+                  const bcryptCheck = validateBcryptPasswordLength(trimmedPass, { trim: true })
+                  if (bcryptCheck !== true) {
+                    nextFieldErrors.joinPassword = bcryptCheck
+                  }
+                }
+
+                if (Object.keys(nextFieldErrors).length > 0) {
+                  setClassFieldErrors(nextFieldErrors)
+                  return
+                }
+
+                setClassFieldErrors({})
+                updateClassMutation.mutate({
+                  name: trimmedName,
+                  classCode: trimmedCode,
+                  password: trimmedPass || undefined,
+                })
+              }}
+            >
+              {classFormError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{classFormError}</AlertDescription>
+                </Alert>
+              )}
+
+              {!classData?.hasPassword && (
+                <Alert variant="warning">
+                  <AlertDescription className="text-xs">
+                    Lớp học chưa mở tham gia. Hãy đặt mật khẩu lớp trước khi chia sẻ mã lớp cho học sinh.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <div>
+                <Label htmlFor="cls-name">Tên lớp học</Label>
+                <Input
+                  id="cls-name"
+                  required
+                  aria-invalid={Boolean(classFieldErrors.name)}
+                  value={classNameInput}
+                  onChange={(e) => {
+                    setClassNameInput(e.target.value)
+                    if (classFieldErrors.name) setClassFieldErrors((prev) => ({ ...prev, name: undefined }))
+                  }}
+                  placeholder="VD: Lớp Toán 12A1"
+                />
+                <FieldError>{classFieldErrors.name}</FieldError>
+              </div>
+
+              <div>
+                <Label htmlFor="cls-code">Mã tham gia lớp</Label>
+                <Input
+                  id="cls-code"
+                  required
+                  aria-invalid={Boolean(classFieldErrors.classCode)}
+                  value={classCodeInput}
+                  onChange={(e) => {
+                    setClassCodeInput(e.target.value.toUpperCase())
+                    if (classFieldErrors.classCode) setClassFieldErrors((prev) => ({ ...prev, classCode: undefined }))
+                  }}
+                  placeholder="VD: TOAN12A1"
+                />
+                <FieldError>{classFieldErrors.classCode}</FieldError>
+              </div>
+
+              <div>
+                <Label htmlFor="cls-pass">
+                  {classData?.hasPassword
+                    ? 'Mật khẩu mới (để trống nếu giữ nguyên)'
+                    : 'Mật khẩu lớp học (bắt buộc để mở lớp)'}
+                </Label>
+                <Input
+                  ref={classPasswordRef}
+                  id="cls-pass"
+                  type="password"
+                  required={!classData?.hasPassword}
+                  aria-invalid={Boolean(classFieldErrors.joinPassword)}
+                  value={classPasswordInput}
+                  onChange={(e) => {
+                    setClassPasswordInput(e.target.value)
+                    if (classFieldErrors.joinPassword) setClassFieldErrors((prev) => ({ ...prev, joinPassword: undefined }))
+                  }}
+                  placeholder={classData?.hasPassword ? 'Nhập mật khẩu mới nếu muốn đổi' : 'Nhập mật khẩu lớp mới (khác 123456)'}
+                />
+                <FieldError>{classFieldErrors.joinPassword}</FieldError>
+                <p className="mt-1 text-[11px] text-slate-500">Tối đa 72 byte UTF-8 (lưu ý tiếng Việt có dấu tốn 2–3 byte/ký tự).</p>
+              </div>
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsEditClassOpen(false)} disabled={updateClassMutation.isPending}>
+                  Hủy
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={updateClassMutation.isPending}
+                >
+                  {updateClassMutation.isPending ? 'Đang lưu...' : 'Lưu thay đổi'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   )

@@ -6,3 +6,7 @@ allowBuilds:
 
 onlyBuiltDependencies:
   - esbuild
+
+minimumReleaseAgeExclude:
+  - recharts@3.11.0
+  - lucide-react@1.74.0

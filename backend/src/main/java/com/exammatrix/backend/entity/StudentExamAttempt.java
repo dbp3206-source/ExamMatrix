@@ -36,6 +36,10 @@ public class StudentExamAttempt {
     @JoinColumn(name = "teacher_id", nullable = false)
     private User teacher;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "class_id")
+    private TeacherClass teacherClass;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 30, nullable = false)
     @Builder.Default
@@ -46,6 +50,13 @@ public class StudentExamAttempt {
 
     @Column(name = "max_score", precision = 8, scale = 2)
     private BigDecimal maxScore;
+
+    @Column(name = "score_on_ten", precision = 5, scale = 2)
+    private BigDecimal scoreOnTen;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "graded_by")
+    private User gradedBy;
 
     @CreationTimestamp
     @Column(name = "started_at", updatable = false)

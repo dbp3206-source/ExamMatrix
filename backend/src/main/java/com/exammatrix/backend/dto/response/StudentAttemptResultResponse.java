@@ -23,6 +23,9 @@ public class StudentAttemptResultResponse {
     private AttemptStatus status;
     private BigDecimal score;
     private BigDecimal maxScore;
+    private BigDecimal scoreOnTen;
+    private Integer correctCount;
+    private Integer totalQuestions;
     private LocalDateTime startedAt;
     private LocalDateTime submittedAt;
     private LocalDateTime gradedAt;

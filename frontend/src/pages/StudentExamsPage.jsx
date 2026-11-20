@@ -1,182 +1,338 @@
-import { useEffect, useState } from 'react'
-import { useQuery, useMutation } from '@tanstack/react-query'
-import { Link, useNavigate } from 'react-router-dom'
-import { api } from '../api/service'
-import { Badge, EmptyState, ErrorState, LoadingState, PageHeader, Pagination } from '../components/UI'
-import { attemptStatusMeta, examTypeLabel } from '../constants'
-import { useToast } from '../components/ToastProvider'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  BookOpen,
+  Clock,
+  Eye,
+  Globe,
+  Lock,
+  Play,
+  RotateCcw,
+  Search,
+} from 'lucide-react'
+import { api } from '@/api/service'
+import { attemptStatusMeta, examTypeLabel } from '@/constants'
+import { formatDateTime } from '@/utils'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { EmptyState, ErrorState, LoadingState, PageHeader } from '@/components/common/StateFeedback'
+import { cn } from '@/lib/utils'
+
+function fmtTen(val) {
+  if (val == null || Number.isNaN(Number(val))) return null
+  const n = Number(val)
+  return Number.isInteger(n) ? `${n}/10` : `${n.toFixed(2).replace(/\.?0+$/, '')}/10`
+}
 
 export default function StudentExamsPage() {
-  const navigate = useNavigate()
-  const { showToast } = useToast()
-  const [page, setPage] = useState(0)
-  const size = 10
+  const [searchParams, setSearchParams] = useSearchParams()
+  const subjectIdParam = searchParams.get('subjectId') || ''
+  const pageParam = Math.max(0, Number.parseInt(searchParams.get('page') || '0', 10) || 0)
+  const sortByParam = searchParams.get('sortBy') || 'publishedAt'
+  const sortDirParam = searchParams.get('sortDir') === 'asc' ? 'asc' : 'desc'
+  const urlSearch = searchParams.get('search') || ''
+
+  const [searchDraft, setSearchDraft] = useState(urlSearch)
 
   useEffect(() => {
-    document.title = 'Đề thi của tôi | Exam Matrix'
+    document.title = 'Đề thi & Luyện tập | Exam Matrix'
   }, [])
 
-  // Check teacher assignment first
-  const {
-    data: currentRequest,
-    isLoading: isReqLoading,
-    error: reqError,
-  } = useQuery({
-    queryKey: ['student', 'teacher-request', 'current'],
-    queryFn: () => api.getCurrentTeacherRequest(),
-  })
+  useEffect(() => {
+    setSearchDraft(urlSearch)
+  }, [urlSearch])
 
-  const isApproved = currentRequest?.status === 'APPROVED'
-
-  // Query exams
-  const {
-    data: examData,
-    isLoading: isExamsLoading,
-    error: examsError,
-    refetch: refetchExams,
-  } = useQuery({
-    queryKey: ['student', 'exams', page, size],
-    queryFn: () => api.getStudentExams({ page, size }),
-  })
-
-  // Mutation to start attempt
-  const startAttemptMutation = useMutation({
-    mutationFn: (paperId) => api.startExamAttempt(paperId),
-    onSuccess: (data, paperId) => {
-      navigate(`/hoc-sinh/lam-bai/${paperId}`, { state: { attemptId: data?.attemptId } })
-    },
-    onError: (err, paperId) => {
-      // If attempt is already in progress, navigate to taking page
-      if (err.message?.includes('đang làm') || err.status === 409) {
-        navigate(`/hoc-sinh/lam-bai/${paperId}`)
-      } else {
-        showToast(err.message || 'Không thể bắt đầu bài thi', 'error')
-      }
-    },
-  })
-
-  if (isReqLoading) {
-    return <LoadingState label="Đang kiểm tra quyền truy cập..." />
+  const updateParams = (patch, resetPage = false) => {
+    const next = new URLSearchParams(searchParams)
+    Object.entries(patch).forEach(([k, v]) => {
+      if (v === '' || v == null) next.delete(k)
+      else next.set(k, String(v))
+    })
+    if (resetPage) next.set('page', '0')
+    setSearchParams(next, { replace: true })
   }
 
-  if (reqError) {
-    return <ErrorState error={reqError} />
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchDraft.trim() !== urlSearch) {
+        updateParams({ search: searchDraft.trim() }, true)
+      }
+    }, 280)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchDraft])
+
+  const subjectsQuery = useQuery({
+    queryKey: ['student', 'exam-subjects'],
+    queryFn: () => api.getStudentExamSubjects(),
+    staleTime: 10000,
+  })
+
+  const examsQuery = useQuery({
+    queryKey: ['student', 'exams', subjectIdParam, urlSearch, sortByParam, sortDirParam, pageParam],
+    queryFn: () =>
+      api.getStudentExams({
+        subjectId: subjectIdParam ? Number(subjectIdParam) : undefined,
+        search: urlSearch || undefined,
+        sortBy: sortByParam,
+        sortDir: sortDirParam,
+        page: pageParam,
+        size: 10,
+      }),
+    placeholderData: (prev) => prev,
+  })
+
+  const subjectCounts = useMemo(() => subjectsQuery.data || [], [subjectsQuery.data])
+  const totalAvailableAll = useMemo(
+    () => subjectCounts.reduce((acc, s) => acc + Number(s.examCount || 0), 0),
+    [subjectCounts],
+  )
+
+  const exams = examsQuery.data?.content || []
+  const totalPages = examsQuery.data?.totalPages ?? 0
+  const totalElements = examsQuery.data?.totalElements ?? 0
+
+  const toggleSort = (field) => {
+    if (sortByParam === field) {
+      updateParams({ sortBy: field, sortDir: sortDirParam === 'desc' ? 'asc' : 'desc' }, true)
+    } else {
+      updateParams({ sortBy: field, sortDir: 'desc' }, true)
+    }
+  }
+
+  const SortIcon = ({ field }) => {
+    if (sortByParam !== field) return <ArrowUpDown className="h-3.5 w-3.5 text-slate-400" />
+    return sortDirParam === 'asc'
+      ? <ArrowUp className="h-3.5 w-3.5 text-teal-700" />
+      : <ArrowDown className="h-3.5 w-3.5 text-teal-700" />
+  }
+
+  const renderAction = (exam) => {
+    const status = exam.attemptStatus
+    if (!status) {
+      return (
+        <Button size="sm" variant="teal" asChild>
+          <Link to={`/hoc-sinh/lam-bai/${exam.paperId}`}>
+            <Play className="h-3.5 w-3.5" />
+            Bắt đầu làm
+          </Link>
+        </Button>
+      )
+    }
+    if (status === 'IN_PROGRESS') {
+      return (
+        <Button size="sm" variant="teal" asChild>
+          <Link to={`/hoc-sinh/lam-bai/${exam.paperId}`}>
+            <RotateCcw className="h-3.5 w-3.5" />
+            Tiếp tục
+          </Link>
+        </Button>
+      )
+    }
+    if (status === 'WAITING_GRADING' || status === 'SUBMITTED' || status === 'COMPLETED') {
+      return (
+        <Button size="sm" variant="outline" asChild>
+          <Link to={`/hoc-sinh/ket-qua/${exam.attemptId}`}>
+            <Eye className="h-3.5 w-3.5" />
+            {status === 'COMPLETED' ? 'Xem kết quả' : 'Xem trạng thái'}
+          </Link>
+        </Button>
+      )
+    }
+    return <span className="text-xs text-slate-400">Đã hủy</span>
   }
 
   return (
-    <div>
+    <div className="space-y-6 pb-20" data-role="student">
       <PageHeader
-        title="Đề thi của tôi"
-        description={
-          isApproved
-            ? `Danh sách đề thi công khai và từ lớp học của giáo viên: ${currentRequest?.teacherName || ''}`
-            : 'Danh sách đề thi công khai và các đề thi bạn được cấp quyền làm.'
-        }
+        accent="teal"
+        title="Đề thi & Luyện tập"
+        description="Chọn môn học để lọc nhanh đề thi khả dụng, mặc định sắp xếp theo đề phát hành mới nhất."
       />
 
-      {!isApproved && (
-        <div className="alert info" style={{ marginBottom: '16px' }}>
-          {currentRequest?.status === 'PENDING'
-            ? 'Yêu cầu tham gia lớp của bạn đang chờ giáo viên xác nhận. Bạn vẫn có thể làm các đề thi Công khai bên dưới.'
-            : 'Bạn chưa tham gia lớp của giáo viên nào. Bạn có thể làm các đề thi Công khai, hoặc tham gia lớp để mở khóa các đề thi Lớp học.'}{' '}
-          <Link to="/hoc-sinh/giao-vien" style={{ fontWeight: 650, textDecoration: 'underline' }}>
-            Tham gia lớp giáo viên
-          </Link>
-        </div>
-      )}
+      <section aria-label="Lọc theo môn học" className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => updateParams({ subjectId: '' }, true)}
+          className={cn(
+            'inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-semibold transition-colors cursor-pointer',
+            !subjectIdParam
+              ? 'border-teal-600 bg-teal-700 text-white shadow-xs'
+              : 'border-slate-200 bg-white text-slate-700 hover:border-teal-300 hover:bg-teal-50/40',
+          )}
+        >
+          <BookOpen className="h-3.5 w-3.5" />
+          <span>Tất cả</span>
+          <span
+            className={cn(
+              'rounded-full px-1.5 py-0.5 text-[11px] tabular-nums',
+              !subjectIdParam ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600',
+            )}
+          >
+            {totalAvailableAll}
+          </span>
+        </button>
 
-      {isExamsLoading ? (
+        {subjectCounts.map((sub) => {
+          const active = subjectIdParam === String(sub.subjectId)
+          return (
+            <button
+              key={sub.subjectId}
+              type="button"
+              onClick={() => updateParams({ subjectId: String(sub.subjectId) }, true)}
+              className={cn(
+                'inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-semibold transition-colors cursor-pointer',
+                active
+                  ? 'border-teal-600 bg-teal-700 text-white shadow-xs'
+                  : 'border-slate-200 bg-white text-slate-700 hover:border-teal-300 hover:bg-teal-50/40',
+              )}
+            >
+              <span>{sub.subjectName}</span>
+              <span
+                className={cn(
+                  'rounded-full px-1.5 py-0.5 text-[11px] tabular-nums',
+                  active ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600',
+                )}
+              >
+                {sub.examCount}
+              </span>
+            </button>
+          )
+        })}
+      </section>
+
+      <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full sm:max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Input
+            value={searchDraft}
+            onChange={(e) => setSearchDraft(e.target.value)}
+            placeholder="Tìm theo mã đề hoặc tên đề..."
+            aria-label="Tìm đề thi theo mã hoặc tên"
+            className="pl-9"
+          />
+        </div>
+        <div className="text-xs font-semibold text-slate-600 tabular-nums">
+          {totalElements} đề thi khả dụng
+        </div>
+      </div>
+
+      {examsQuery.isPending ? (
         <LoadingState label="Đang tải danh sách đề thi..." />
-      ) : examsError ? (
-        <ErrorState error={examsError} onRetry={refetchExams} />
-      ) : !examData?.content || examData.content.length === 0 ? (
+      ) : examsQuery.isError ? (
+        <ErrorState error={examsQuery.error} onRetry={examsQuery.refetch} />
+      ) : exams.length === 0 ? (
         <EmptyState
-          title="Chưa có đề thi nào"
-          description="Giáo viên của bạn hiện chưa phát hành đề thi nào cho lớp."
+          title="Không tìm thấy đề thi phù hợp"
+          description="Thử chọn môn học khác hoặc xóa từ khóa tìm kiếm."
         />
       ) : (
-        <section className="panel">
-          <div className="table-wrap">
-            <table>
-              <thead>
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[820px] text-left text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50/80 text-xs font-semibold text-slate-600">
                 <tr>
-                  <th>Mã đề</th>
-                  <th>Tên đề thi</th>
-                  <th>Môn học</th>
-                  <th>Phạm vi</th>
-                  <th>Loại đề</th>
-                  <th>Thời gian</th>
-                  <th>Số câu</th>
-                  <th>Trạng thái</th>
-                  <th style={{ textAlign: 'right' }}>Thao tác</th>
+                  <th className="px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort('examCode')}
+                      className="inline-flex items-center gap-1 hover:text-teal-700 cursor-pointer"
+                    >
+                      Mã đề
+                      <SortIcon field="examCode" />
+                    </button>
+                  </th>
+                  <th className="px-4 py-3 border-l border-slate-200/70">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort('title')}
+                      className="inline-flex items-center gap-1 hover:text-teal-700 cursor-pointer"
+                    >
+                      Đề thi &amp; Môn học
+                      <SortIcon field="title" />
+                    </button>
+                  </th>
+                  <th className="px-4 py-3 border-l border-slate-200/70 text-right">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort('duration')}
+                      className="inline-flex items-center gap-1 hover:text-teal-700 cursor-pointer"
+                    >
+                      Thời lượng
+                      <SortIcon field="duration" />
+                    </button>
+                  </th>
+                  <th className="px-4 py-3 border-l border-slate-200/70">Phạm vi</th>
+                  <th className="px-4 py-3 border-l border-slate-200/70">Trạng thái</th>
+                  <th className="px-4 py-3 border-l border-slate-200/70 text-right">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort('publishedAt')}
+                      className="inline-flex items-center gap-1 hover:text-teal-700 cursor-pointer"
+                    >
+                      Phát hành
+                      <SortIcon field="publishedAt" />
+                    </button>
+                  </th>
+                  <th className="px-4 py-3 border-l border-slate-200/70 text-right">Thao tác</th>
                 </tr>
               </thead>
-              <tbody>
-                {examData.content.map((exam) => {
-                  const status = exam.attemptStatus || 'AVAILABLE'
-                  const meta = attemptStatusMeta(status)
+              <tbody className="divide-y divide-slate-100">
+                {exams.map((exam) => {
+                  const statusMeta = exam.attemptStatus ? attemptStatusMeta(exam.attemptStatus) : null
+                  const scoreText = exam.attemptStatus === 'COMPLETED' ? fmtTen(exam.scoreOnTen) : null
                   return (
-                    <tr key={exam.paperId}>
-                      <td>
-                        <strong>{exam.examCode || '—'}</strong>
+                    <tr key={exam.paperId} className="hover:bg-slate-50/60">
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <Badge variant="indigo" className="tabular-nums">#{exam.examCode}</Badge>
                       </td>
-                      <td className="long-cell">
-                        <strong>{exam.title}</strong>
-                        {exam.teacherName && (
-                          <span className="subtext">GV: {exam.teacherName}</span>
-                        )}
+                      <td className="px-4 py-3 border-l border-slate-100">
+                        <div className="font-semibold text-slate-900">{exam.title}</div>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                          <span>{exam.subjectName}</span>
+                          <span>·</span>
+                          <span>{examTypeLabel(exam.examType)}</span>
+                          <span>·</span>
+                          <span className="tabular-nums">{exam.totalQuestions} câu</span>
+                        </div>
                       </td>
-                      <td>{exam.subjectName || '—'}</td>
-                      <td>
-                        <Badge tone={exam.accessType === 'PRIVATE' ? 'warning' : 'neutral'}>
-                          {exam.accessType === 'PRIVATE' ? 'Lớp học' : 'Công khai'}
+                      <td className="px-4 py-3 border-l border-slate-100 text-right whitespace-nowrap tabular-nums text-slate-700">
+                        <span className="inline-flex items-center gap-1">
+                          <Clock className="h-3.5 w-3.5 text-slate-400" />
+                          {exam.duration} phút
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 border-l border-slate-100 whitespace-nowrap">
+                        <Badge variant={exam.accessType === 'PRIVATE' ? 'warning' : 'success'}>
+                          {exam.accessType === 'PRIVATE' ? (
+                            <><Lock className="h-3 w-3" /> Lớp học</>
+                          ) : (
+                            <><Globe className="h-3 w-3" /> Công khai</>
+                          )}
                         </Badge>
                       </td>
-                      <td>
-                        <Badge tone={exam.examType === 'ESSAY' ? 'warning' : 'neutral'}>
-                          {examTypeLabel(exam.examType)}
-                        </Badge>
+                      <td className="px-4 py-3 border-l border-slate-100 whitespace-nowrap">
+                        {!statusMeta ? (
+                          <Badge variant="neutral">Chưa làm</Badge>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <Badge variant={statusMeta.variant || statusMeta.tone}>{statusMeta.label}</Badge>
+                            {scoreText && (
+                              <span className="text-xs font-bold tabular-nums text-teal-700">{scoreText}</span>
+                            )}
+                          </div>
+                        )}
                       </td>
-                      <td>{exam.duration} phút</td>
-                      <td>{exam.totalQuestions} câu</td>
-                      <td>
-                        <Badge tone={meta.tone}>{meta.label}</Badge>
+                      <td className="px-4 py-3 border-l border-slate-100 text-right whitespace-nowrap text-xs tabular-nums text-slate-500">
+                        {formatDateTime(exam.publishedAt || exam.createdAt)}
                       </td>
-                      <td style={{ textAlign: 'right' }}>
-                        {status === 'AVAILABLE' && (
-                          <button
-                            type="button"
-                            className="button small"
-                            disabled={startAttemptMutation.isPending}
-                            onClick={() => startAttemptMutation.mutate(exam.paperId)}
-                          >
-                            Bắt đầu làm bài
-                          </button>
-                        )}
-                        {status === 'IN_PROGRESS' && (
-                          <button
-                            type="button"
-                            className="button small"
-                            onClick={() => navigate(`/hoc-sinh/lam-bai/${exam.paperId}`)}
-                          >
-                            Tiếp tục làm bài
-                          </button>
-                        )}
-                        {(status === 'COMPLETED' || status === 'WAITING_GRADING' || status === 'SUBMITTED') && (
-                          <button
-                            type="button"
-                            className="button secondary small"
-                            onClick={() =>
-                              navigate(
-                                exam.attemptId
-                                  ? `/hoc-sinh/ket-qua/${exam.attemptId}`
-                                  : `/hoc-sinh/de-thi`
-                              )
-                            }
-                          >
-                            Xem kết quả
-                          </button>
-                        )}
+                      <td className="px-4 py-3 border-l border-slate-100 text-right whitespace-nowrap">
+                        {renderAction(exam)}
                       </td>
                     </tr>
                   )
@@ -185,12 +341,32 @@ export default function StudentExamsPage() {
             </table>
           </div>
 
-          <Pagination
-            page={examData.page || page}
-            totalPages={examData.totalPages || 0}
-            onChange={(newPage) => setPage(newPage)}
-          />
-        </section>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-600">
+              <span className="tabular-nums">
+                Trang {pageParam + 1} / {totalPages}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={pageParam <= 0}
+                  onClick={() => updateParams({ page: pageParam - 1 })}
+                >
+                  Trước
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={pageParam + 1 >= totalPages}
+                  onClick={() => updateParams({ page: pageParam + 1 })}
+                >
+                  Sau
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
     </div>
   )

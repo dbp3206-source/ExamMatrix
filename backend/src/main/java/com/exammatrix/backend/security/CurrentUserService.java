@@ -17,6 +17,14 @@ public class CurrentUserService {
     private final UserRepository userRepository;
 
     public User getCurrentUser() {
+        return getCurrentUser(false);
+    }
+
+    public User getCurrentUserForUpdate() {
+        return getCurrentUser(true);
+    }
+
+    private User getCurrentUser(boolean forUpdate) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
         if (authentication == null
@@ -30,9 +38,9 @@ public class CurrentUserService {
             );
         }
 
-        User user = userRepository.findByUsernameIgnoreCase(
-                authentication.getName()
-        ).orElseThrow(() -> new ResponseStatusException(
+        User user = (forUpdate ? userRepository.findByUsernameForUpdate(authentication.getName())
+                : userRepository.findByUsernameIgnoreCase(authentication.getName()))
+            .orElseThrow(() -> new ResponseStatusException(
                     HttpStatus.UNAUTHORIZED,
                     "Tài khoản không tồn tại"
                 )

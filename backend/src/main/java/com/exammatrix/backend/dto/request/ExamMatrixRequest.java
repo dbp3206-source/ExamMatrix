@@ -33,5 +33,5 @@ public class ExamMatrixRequest {
 
     @NotEmpty(message = "Ma trận phải có ít nhất một cấu hình")
     @Valid
-    private List<MatrixConfigRequest> configs;
+    private List<@NotNull(message = "Cấu hình ma trận không được để trống") MatrixConfigRequest> configs;
 }

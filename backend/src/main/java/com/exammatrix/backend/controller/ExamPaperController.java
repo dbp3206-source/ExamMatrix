@@ -2,7 +2,10 @@ package com.exammatrix.backend.controller;
 
 import com.exammatrix.backend.dto.request.UpdateExamPaperAccessRequest;
 import com.exammatrix.backend.dto.response.ExamPaperDetailResponse;
+import com.exammatrix.backend.dto.response.ExamPaperSummaryResponse;
 import com.exammatrix.backend.dto.response.PageResponse;
+import com.exammatrix.backend.entity.enums.ExamAccessType;
+import com.exammatrix.backend.entity.enums.ExamType;
 import com.exammatrix.backend.service.ExamPaperService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -33,6 +36,21 @@ public class ExamPaperController {
                     size
             )
         );
+    }
+
+    @GetMapping("/summary")
+    public ResponseEntity<PageResponse<ExamPaperSummaryResponse>> getExamPaperSummaries(
+            @RequestParam(required = false) UUID matrixId,
+            @RequestParam(required = false) Integer subjectId,
+            @RequestParam(required = false) ExamType examType,
+            @RequestParam(required = false) ExamAccessType accessType,
+            @RequestParam(required = false) Boolean isPublished,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "20") Integer size
+    ) {
+        return ResponseEntity.ok(examPaperService.getExamPaperSummaries(
+                matrixId, subjectId, examType, accessType, isPublished, search, page, size));
     }
 
     @GetMapping("/{id}")

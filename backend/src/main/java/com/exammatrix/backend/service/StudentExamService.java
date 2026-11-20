@@ -9,6 +9,16 @@ import java.util.UUID;
 public interface StudentExamService {
     PageResponse<StudentExamSummaryResponse> getAccessibleExams(Pageable pageable);
 
+    PageResponse<StudentExamSummaryResponse> getAccessibleExams(
+            Integer subjectId,
+            String search,
+            String sortBy,
+            String sortDir,
+            Pageable pageable
+    );
+
+    java.util.List<StudentSubjectExamCountResponse> getAccessibleExamSubjectCounts();
+
     StudentExamDetailResponse getExamDetail(UUID paperId);
 
     StartAttemptResponse startAttempt(UUID paperId);

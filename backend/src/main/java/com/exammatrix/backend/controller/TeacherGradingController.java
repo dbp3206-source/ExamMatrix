@@ -6,6 +6,7 @@ import com.exammatrix.backend.dto.response.GradingAttemptDetailResponse;
 import com.exammatrix.backend.dto.response.PageResponse;
 import com.exammatrix.backend.dto.response.PendingGradingSummaryResponse;
 import com.exammatrix.backend.dto.response.StudentAttemptResultResponse;
+import com.exammatrix.backend.entity.enums.AttemptStatus;
 import com.exammatrix.backend.service.TeacherGradingService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -24,11 +25,12 @@ public class TeacherGradingController {
 
     @GetMapping("/pending")
     public ResponseEntity<PageResponse<PendingGradingSummaryResponse>> getPendingGrading(
+            @RequestParam(required = false) AttemptStatus status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
         Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, Math.min(size, 100)));
-        return ResponseEntity.ok(teacherGradingService.getPendingGrading(pageable));
+        return ResponseEntity.ok(teacherGradingService.getPendingGrading(status, pageable));
     }
 
     @GetMapping("/attempts/{attemptId}")

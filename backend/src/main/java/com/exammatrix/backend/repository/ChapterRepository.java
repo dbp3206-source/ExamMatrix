@@ -12,6 +12,8 @@ public interface ChapterRepository extends JpaRepository<Chapter, Integer> {
             Integer subjectId
     );
 
+    boolean existsBySubjectId(Integer subjectId);
+
     boolean existsBySubjectIdAndOrderIndex(
             Integer subjectId,
             Integer orderIndex

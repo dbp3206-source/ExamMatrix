@@ -1,5 +1,6 @@
 package com.exammatrix.backend.dto.response;
 
+import com.exammatrix.backend.entity.enums.ClassJoinMode;
 import lombok.*;
 
 import java.time.LocalDateTime;
@@ -15,6 +16,7 @@ public class TeacherClassResponse {
     private String teacherName;
     private String name;
     private String classCode;
+    private ClassJoinMode joinMode;
     private long studentCount;
     private boolean hasPassword;
     private LocalDateTime createdAt;

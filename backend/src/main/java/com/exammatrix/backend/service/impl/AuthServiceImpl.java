@@ -33,11 +33,13 @@ public class AuthServiceImpl implements AuthService {
     private final CurrentUserService currentUserService;
 
     @Override
+    @Transactional
     public AuthResponse login(LoginRequest request) {
         String username = request.getUsername()
                 .trim()
                 .toLowerCase(Locale.ROOT);
 
+        var matchingUser = userRepository.findByUsernameForUpdate(username);
         try {
             authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
@@ -57,7 +59,7 @@ public class AuthServiceImpl implements AuthService {
             );
         }
 
-        User user = userRepository.findByUsernameIgnoreCase(username)
+        User user = matchingUser
             .orElseThrow(() ->
                 new ResponseStatusException(
                     HttpStatus.UNAUTHORIZED,
@@ -83,7 +85,7 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public UserResponse updateProfile(UpdateProfileRequest request) {
-        User user = currentUserService.getCurrentUser();
+        User user = currentUserService.getCurrentUserForUpdate();
 
         String normalizedEmail = request.getEmail()
                 .trim()
@@ -112,8 +114,10 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public void changePassword(ChangePasswordRequest request) {
-        User user =
-                currentUserService.getCurrentUser();
+        User user = currentUserService.getCurrentUserForUpdate();
+        if (user.getGoogleSubject() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Tài khoản này đăng nhập bằng Google");
+        }
 
         boolean currentPasswordCorrect = passwordEncoder.matches(
                     request.getCurrentPassword(),
@@ -144,18 +148,15 @@ public class AuthServiceImpl implements AuthService {
                 request.getNewPassword()
             )
         );
+        user.invalidateSessions();
 
         userRepository.save(user);
     }
 
     @Override
+    @Transactional
     public void logout() {
-        /*
-         * JWT là stateless nên backend hiện chưa lưu session
-         * để xóa. Frontend chỉ cần xóa accessToken.
-         *
-         * Sau này có thể làm refresh token hoặc blacklist.
-         */
+        currentUserService.getCurrentUserForUpdate().invalidateSessions();
     }
 
     private UserResponse convertToResponse(User user) {

@@ -4,21 +4,21 @@ import com.exammatrix.backend.dto.request.GenerateExamPapersRequest;
 import com.exammatrix.backend.dto.request.UpdateExamPaperAccessRequest;
 import com.exammatrix.backend.dto.response.*;
 import com.exammatrix.backend.entity.*;
+import com.exammatrix.backend.entity.enums.ExamAccessType;
 import com.exammatrix.backend.entity.enums.ExamType;
-import com.exammatrix.backend.entity.enums.QuestionType;
-import com.exammatrix.backend.repository.ExamMatrixRepository;
 import com.exammatrix.backend.repository.ExamPaperRepository;
-import com.exammatrix.backend.repository.QuestionRepository;
+import com.exammatrix.backend.repository.StudentExamAttemptRepository;
 import com.exammatrix.backend.security.CurrentUserService;
+import com.exammatrix.backend.service.ExamGenerationService;
 import com.exammatrix.backend.service.ExamPaperService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.security.SecureRandom;
 import java.util.*;
 
 @Service
@@ -26,11 +26,9 @@ import java.util.*;
 @Transactional(readOnly = true)
 public class ExamPaperServiceImpl implements ExamPaperService {
     private final ExamPaperRepository examPaperRepository;
-    private final ExamMatrixRepository examMatrixRepository;
-    private final QuestionRepository questionRepository;
+    private final StudentExamAttemptRepository studentExamAttemptRepository;
     private final CurrentUserService currentUserService;
-
-    private final SecureRandom secureRandom = new SecureRandom();
+    private final ExamGenerationService examGenerationService;
 
     @Override
     public PageResponse<ExamPaperDetailResponse> getAllExamPapers(
@@ -73,6 +71,26 @@ public class ExamPaperServiceImpl implements ExamPaperService {
     }
 
     @Override
+    public PageResponse<ExamPaperSummaryResponse> getExamPaperSummaries(
+            UUID matrixId, Integer subjectId, ExamType examType, ExamAccessType accessType,
+            Boolean isPublished, String search, Integer page, Integer size) {
+        User currentUser = currentUserService.getCurrentUser();
+        String searchText = search == null ? "" : search.strip();
+        if (searchText.length() > 160) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Từ khóa không được vượt quá 160 ký tự");
+        }
+        int safePage = page == null || page < 0 ? 0 : page;
+        int safeSize = size == null || size < 1 ? 20 : Math.min(size, 100);
+        UUID teacherId = isAdmin(currentUser) ? null : currentUser.getId();
+        Pageable pageable = PageRequest.of(safePage, safeSize,
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
+        Page<ExamPaperSummaryResponse> result = examPaperRepository.searchExamPaperSummaries(
+                teacherId, matrixId, subjectId, examType, accessType, isPublished, searchText, pageable);
+        return new PageResponse<>(result.getContent(), result.getNumber(), result.getSize(),
+                result.getTotalElements(), result.getTotalPages());
+    }
+
+    @Override
     public ExamPaperDetailResponse getExamPaperById(UUID id) {
         User currentUser = currentUserService.getCurrentUser();
 
@@ -84,60 +102,12 @@ public class ExamPaperServiceImpl implements ExamPaperService {
     }
 
     @Override
-    @Transactional
+    @Transactional(readOnly = false)
     public List<ExamPaperDetailResponse> generateExamPapers(
             UUID matrixId,
             GenerateExamPapersRequest request
     ) {
-        User currentUser = currentUserService.getCurrentUser();
-
-        ExamMatrix matrix = examMatrixRepository.findByIdForUpdate(matrixId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Không tìm thấy ma trận có ID " + matrixId
-                ));
-
-        checkCanAccess(matrix, currentUser);
-
-        int numberOfPapers = request.getNumberOfPapers();
-
-        List<ExamPaper> generatedPapers = new ArrayList<>();
-        Set<String> codesInCurrentRequest = new HashSet<>();
-
-        for (int index = 0; index < numberOfPapers; index++) {
-            List<Question> selectedQuestions = selectQuestionsForPaper(matrix);
-
-            ExamPaper paper = new ExamPaper();
-
-            paper.setExamMatrix(matrix);
-            paper.setExamCode(generateExamCode(matrix.getId(), codesInCurrentRequest));
-
-            for (int questionIndex = 0; questionIndex < selectedQuestions.size(); questionIndex++) {
-
-                Question question = selectedQuestions.get(questionIndex);
-
-                PaperQuestion paperQuestion = new PaperQuestion();
-
-                paperQuestion.setQuestion(question);
-                paperQuestion.setQuestionOrder(questionIndex + 1);
-
-                paper.addPaperQuestion(paperQuestion);
-            }
-
-            ExamPaper savedPaper = examPaperRepository.save(paper);
-
-            generatedPapers.add(savedPaper);
-        }
-
-        examPaperRepository.flush();
-
-        List<ExamPaperDetailResponse> responses = new ArrayList<>();
-
-        for (ExamPaper paper : generatedPapers) {
-            responses.add(convertToResponse(paper));
-        }
-
-        return responses;
+        return examGenerationService.generateExamPapers(matrixId, request);
     }
 
     @Override
@@ -145,12 +115,26 @@ public class ExamPaperServiceImpl implements ExamPaperService {
     public void deleteExamPaper(UUID id) {
         User currentUser = currentUserService.getCurrentUser();
 
-        ExamPaper paper = findExamPaperById(id);
+        ExamPaper paper = findPaperForUpdate(id);
 
         checkCanAccess(paper.getExamMatrix(), currentUser);
 
-        examPaperRepository.delete(paper);
-        examPaperRepository.flush();
+        if (studentExamAttemptRepository.existsByExamPaper_Id(id)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Không thể xóa đề thi đã có học sinh làm bài"
+            );
+        }
+
+        try {
+            examPaperRepository.delete(paper);
+            examPaperRepository.flush();
+        } catch (DataIntegrityViolationException exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Không thể xóa đề thi đang được sử dụng"
+            );
+        }
     }
 
     @Override
@@ -158,7 +142,7 @@ public class ExamPaperServiceImpl implements ExamPaperService {
     public ExamPaperDetailResponse updateExamPaperAccess(UUID id, UpdateExamPaperAccessRequest request) {
         User currentUser = currentUserService.getCurrentUser();
 
-        ExamPaper paper = findExamPaperById(id);
+        ExamPaper paper = findPaperForUpdate(id);
 
         checkCanAccess(paper.getExamMatrix(), currentUser);
 
@@ -167,96 +151,15 @@ public class ExamPaperServiceImpl implements ExamPaperService {
         }
 
         if (request.getIsPublished() != null) {
+            boolean wasPublished = Boolean.TRUE.equals(paper.getIsPublished());
             paper.setIsPublished(request.getIsPublished());
+            if (Boolean.TRUE.equals(request.getIsPublished()) && (!wasPublished || paper.getPublishedAt() == null)) {
+                paper.setPublishedAt(java.time.LocalDateTime.now());
+            }
         }
 
         ExamPaper saved = examPaperRepository.save(paper);
         return convertToResponse(saved);
-    }
-
-    private List<Question> selectQuestionsForPaper(ExamMatrix matrix) {
-        List<Question> selectedQuestions = new ArrayList<>();
-
-        Set<UUID> selectedQuestionIds = new HashSet<>();
-
-        boolean isEssay = matrix.getExamType() == ExamType.ESSAY;
-
-        for (ExamMatrixConfig config : matrix.getConfigs()) {
-            List<Question> candidates = new ArrayList<>(questionRepository.findAllByChapterAndDifficultyAndIsEssay(
-                        config.getChapter().getId(),
-                        config.getDifficulty(),
-                        isEssay
-                )
-            );
-
-            if (candidates.size() < config.getQuantity()) {
-                throw new ResponseStatusException(
-                        HttpStatus.CONFLICT, "Chương "
-                        + config.getChapter().getName()
-                        + " không đủ câu hỏi mức "
-                        + config.getDifficulty()
-                );
-            }
-
-            Collections.shuffle(candidates, secureRandom);
-
-            int added = 0;
-
-            for (Question candidate : candidates) {
-                if (selectedQuestionIds.add(candidate.getId())) {
-                    selectedQuestions.add(candidate);
-                    added++;
-                }
-
-                if (added == config.getQuantity()) {
-                    break;
-                }
-            }
-
-            if (added < config.getQuantity()) {
-                throw new ResponseStatusException(
-                        HttpStatus.CONFLICT,
-                        "Không chọn đủ câu hỏi cho cấu hình ma trận"
-                );
-            }
-        }
-
-        if (selectedQuestions.size() != matrix.getTotalQuestions()) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Số câu đã chọn không bằng tổng số câu của ma trận"
-            );
-        }
-
-        Collections.shuffle(selectedQuestions, secureRandom);
-
-        return selectedQuestions;
-    }
-
-    private String generateExamCode(UUID matrixId, Set<String> codesInCurrentRequest) {
-        for (int attempt = 0; attempt < 100; attempt++) {
-            String code = String.format(
-                    Locale.ROOT,
-                    "%06d",
-                    secureRandom.nextInt(1_000_000)
-            );
-
-            boolean alreadyUsed = codesInCurrentRequest.contains(code) || examPaperRepository
-                .existsByExamMatrix_IdAndExamCode(
-                        matrixId,
-                        code
-            );
-
-            if (!alreadyUsed) {
-                codesInCurrentRequest.add(code);
-                return code;
-            }
-        }
-
-        throw new ResponseStatusException(
-                HttpStatus.CONFLICT,
-                "Không thể tạo mã đề duy nhất"
-        );
     }
 
     private ExamPaper findExamPaperById(UUID id) {
@@ -265,6 +168,11 @@ public class ExamPaperServiceImpl implements ExamPaperService {
                         HttpStatus.NOT_FOUND,
                         "Không tìm thấy đề thi có ID " + id
                 ));
+    }
+
+    private ExamPaper findPaperForUpdate(UUID id) {
+        return examPaperRepository.findByIdForUpdate(id).orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đề thi có ID " + id));
     }
 
     private void checkCanAccess(ExamMatrix matrix, User currentUser) {
@@ -306,7 +214,7 @@ public class ExamPaperServiceImpl implements ExamPaperService {
             if (isEssay) {
                 referenceAnswer = question.getReferenceAnswer();
             } else {
-                for (Answer answer : question.getAnswers()) {
+                for (Answer answer : PaperAnswerOrderHelper.orderAnswersForPaper(paper.getId(), question)) {
                     answerResponses.add(new AnswerResponse(
                                 answer.getId(),
                                 answer.getContent(),
@@ -315,7 +223,6 @@ public class ExamPaperServiceImpl implements ExamPaperService {
                     );
                 }
             }
-
 
             questionResponses.add(new PaperQuestionResponse(
                         question.getId(),

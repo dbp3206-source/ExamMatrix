@@ -3,7 +3,10 @@
 *.iml
 target/
 node_modules/
+.pnpm-store/
 dist/
 *.log
 .env.local
+.env
+!.env.example
 .DS_Store

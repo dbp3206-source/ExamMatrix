@@ -6,11 +6,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.*;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.ErrorResponse;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -143,6 +148,33 @@ public class GlobalExceptionHandler {
                         "Tham số này là bắt buộc"
                 )
         );
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiErrorResponse> handleMaxUploadSize(MaxUploadSizeExceededException exception) {
+        return buildResponse(
+                HttpStatus.BAD_REQUEST,
+                "FILE_TOO_LARGE",
+                "Kích thước file vượt quá giới hạn tối đa 10MB",
+                Map.of()
+        );
+    }
+
+    @ExceptionHandler({
+            NoResourceFoundException.class,
+            HttpRequestMethodNotSupportedException.class,
+            HttpMediaTypeNotSupportedException.class
+    })
+    public ResponseEntity<ApiErrorResponse> handleHttpProtocolError(ErrorResponse exception) {
+        int status = exception.getStatusCode().value();
+        String message = switch (status) {
+            case 404 -> "Không tìm thấy đường dẫn";
+            case 405 -> "Phương thức HTTP không được hỗ trợ";
+            default -> "Định dạng nội dung không được hỗ trợ";
+        };
+        return ResponseEntity.status(status)
+                .headers(exception.getHeaders())
+                .body(new ApiErrorResponse(LocalDateTime.now(), status, HttpStatus.valueOf(status).name(), message, Map.of()));
     }
 
     @ExceptionHandler(Exception.class)

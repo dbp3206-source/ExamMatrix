@@ -17,6 +17,7 @@ public class StudentExamSummaryResponse {
     private String examCode;
     private String title;
     private String teacherName;
+    private Integer subjectId;
     private String subjectName;
     private ExamType examType;
     private Integer duration;
@@ -24,5 +25,7 @@ public class StudentExamSummaryResponse {
     private ExamAccessType accessType;
     private AttemptStatus attemptStatus;
     private UUID attemptId;
+    private java.math.BigDecimal scoreOnTen;
+    private LocalDateTime publishedAt;
     private LocalDateTime createdAt;
 }

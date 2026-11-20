@@ -43,6 +43,7 @@ public class QuestionServiceImpl implements QuestionService {
     private final CurrentUserService currentUserService;
 
     @Override
+    @Transactional(readOnly = true)
     public PageResponse<QuestionResponse> getAllQuestions(
             String search,
             Integer subjectId,
@@ -90,6 +91,7 @@ public class QuestionServiceImpl implements QuestionService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public QuestionResponse getQuestionById(UUID id) {
         currentUserService.getCurrentUser();
 

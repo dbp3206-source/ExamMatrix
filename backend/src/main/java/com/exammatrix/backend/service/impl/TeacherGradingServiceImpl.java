@@ -5,10 +5,12 @@ import com.exammatrix.backend.dto.request.GradeAnswerRequest;
 import com.exammatrix.backend.dto.response.*;
 import com.exammatrix.backend.entity.*;
 import com.exammatrix.backend.entity.enums.AttemptStatus;
+import com.exammatrix.backend.entity.enums.ExamType;
 import com.exammatrix.backend.entity.enums.QuestionType;
 import com.exammatrix.backend.repository.StudentAttemptAnswerRepository;
 import com.exammatrix.backend.repository.StudentExamAttemptRepository;
 import com.exammatrix.backend.security.CurrentUserService;
+import com.exammatrix.backend.service.ScoreScaleService;
 import com.exammatrix.backend.service.TeacherGradingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -30,15 +32,31 @@ public class TeacherGradingServiceImpl implements TeacherGradingService {
     private final StudentExamAttemptRepository attemptRepository;
     private final StudentAttemptAnswerRepository attemptAnswerRepository;
     private final CurrentUserService currentUserService;
+    private final ScoreScaleService scoreScaleService;
 
     @Override
     public PageResponse<PendingGradingSummaryResponse> getPendingGrading(Pageable pageable) {
+        return getPendingGrading(AttemptStatus.WAITING_GRADING, pageable);
+    }
+
+    @Override
+    public PageResponse<PendingGradingSummaryResponse> getPendingGrading(AttemptStatus status, Pageable pageable) {
         User currentUser = currentUserService.getCurrentUser();
         boolean isAdmin = "ADMIN".equalsIgnoreCase(currentUser.getRole().getName());
+        AttemptStatus targetStatus = status != null ? status : AttemptStatus.WAITING_GRADING;
 
-        Page<StudentExamAttempt> page = isAdmin
-                ? attemptRepository.findByStatus(AttemptStatus.WAITING_GRADING, pageable)
-                : attemptRepository.findByTeacher_IdAndStatus(currentUser.getId(), AttemptStatus.WAITING_GRADING, pageable);
+        Page<StudentExamAttempt> page;
+        if (targetStatus == AttemptStatus.COMPLETED) {
+            page = isAdmin
+                    ? attemptRepository.findByStatusAndExamPaper_ExamMatrix_ExamType(
+                            AttemptStatus.COMPLETED, ExamType.ESSAY, pageable)
+                    : attemptRepository.findByTeacher_IdAndStatusAndExamPaper_ExamMatrix_ExamType(
+                            currentUser.getId(), AttemptStatus.COMPLETED, ExamType.ESSAY, pageable);
+        } else {
+            page = isAdmin
+                    ? attemptRepository.findByStatus(targetStatus, pageable)
+                    : attemptRepository.findByTeacher_IdAndStatus(currentUser.getId(), targetStatus, pageable);
+        }
 
         List<PendingGradingSummaryResponse> responses = page.getContent().stream()
                 .map(attempt -> PendingGradingSummaryResponse.builder()
@@ -117,6 +135,7 @@ public class TeacherGradingServiceImpl implements TeacherGradingService {
                 .examType(matrix.getExamType())
                 .score(attempt.getScore())
                 .maxScore(attempt.getMaxScore())
+                .scoreOnTen(scoreScaleService.normalizeToTen(attempt.getScore(), attempt.getMaxScore(), attempt.getScoreOnTen()))
                 .answers(answers)
                 .build();
     }
@@ -125,7 +144,7 @@ public class TeacherGradingServiceImpl implements TeacherGradingService {
     @Transactional
     public void gradeAnswer(UUID attemptId, UUID answerId, GradeAnswerRequest request) {
         User currentUser = currentUserService.getCurrentUser();
-        StudentExamAttempt attempt = findAttemptAndVerifyTeacherAccess(attemptId, currentUser);
+        StudentExamAttempt attempt = findAttemptAndVerifyTeacherAccess(attemptId, currentUser, true);
 
         if (attempt.getStatus() != AttemptStatus.WAITING_GRADING && attempt.getStatus() != AttemptStatus.SUBMITTED) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bài thi không ở trạng thái chờ chấm điểm");
@@ -136,6 +155,10 @@ public class TeacherGradingServiceImpl implements TeacherGradingService {
 
         if (!answer.getAttempt().getId().equals(attempt.getId())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Câu trả lời không thuộc về lượt thi này");
+        }
+
+        if (answer.getQuestion().getType() != QuestionType.ESSAY) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Chỉ có thể chấm điểm thủ công cho câu hỏi tự luận");
         }
 
         ExamPaper paper = attempt.getExamPaper();
@@ -164,14 +187,27 @@ public class TeacherGradingServiceImpl implements TeacherGradingService {
     @Transactional
     public StudentAttemptResultResponse completeGrading(UUID attemptId, CompleteGradingRequest request) {
         User currentUser = currentUserService.getCurrentUser();
-        StudentExamAttempt attempt = findAttemptAndVerifyTeacherAccess(attemptId, currentUser);
+        StudentExamAttempt attempt = findAttemptAndVerifyTeacherAccess(attemptId, currentUser, true);
+
+        if (request != null && request.getStatus() != null && !AttemptStatus.COMPLETED.name().equals(request.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Trạng thái hoàn tất chấm phải là COMPLETED");
+        }
+        if (attempt.getStatus() == AttemptStatus.COMPLETED) {
+            return toResultResponse(attempt, attemptAnswerRepository.findByAttempt_Id(attempt.getId()));
+        }
+
+        if (attempt.getStatus() != AttemptStatus.WAITING_GRADING && attempt.getStatus() != AttemptStatus.SUBMITTED) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Chỉ có thể hoàn tất chấm cho bài thi đang ở trạng thái chờ chấm"
+            );
+        }
 
         ExamPaper paper = attempt.getExamPaper();
         List<StudentAttemptAnswer> answerList = attemptAnswerRepository.findByAttempt_Id(attempt.getId());
         Map<UUID, StudentAttemptAnswer> answerMap = answerList.stream()
                 .collect(Collectors.toMap(a -> a.getQuestion().getId(), a -> a));
 
-        // Check that all essay questions have been graded
         for (PaperQuestion pq : paper.getPaperQuestions()) {
             if (pq.getQuestion().getType() == QuestionType.ESSAY) {
                 StudentAttemptAnswer a = answerMap.get(pq.getQuestion().getId());
@@ -184,7 +220,6 @@ public class TeacherGradingServiceImpl implements TeacherGradingService {
             }
         }
 
-        // Calculate total score
         BigDecimal totalScore = BigDecimal.ZERO;
         for (StudentAttemptAnswer a : answerList) {
             if (a.getAwardedScore() != null) {
@@ -193,7 +228,9 @@ public class TeacherGradingServiceImpl implements TeacherGradingService {
         }
 
         attempt.setScore(totalScore);
+        attempt.setScoreOnTen(scoreScaleService.normalizeToTen(totalScore, attempt.getMaxScore(), null));
         attempt.setStatus(AttemptStatus.COMPLETED);
+        attempt.setGradedBy(currentUser);
         attempt.setGradedAt(LocalDateTime.now());
         attemptRepository.save(attempt);
 
@@ -201,7 +238,12 @@ public class TeacherGradingServiceImpl implements TeacherGradingService {
     }
 
     private StudentExamAttempt findAttemptAndVerifyTeacherAccess(UUID attemptId, User currentUser) {
-        StudentExamAttempt attempt = attemptRepository.findById(attemptId)
+        return findAttemptAndVerifyTeacherAccess(attemptId, currentUser, false);
+    }
+
+    private StudentExamAttempt findAttemptAndVerifyTeacherAccess(UUID attemptId, User currentUser, boolean forUpdate) {
+        StudentExamAttempt attempt = (forUpdate ? attemptRepository.findByIdForUpdate(attemptId)
+                : attemptRepository.findById(attemptId))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy lượt làm bài"));
 
         boolean isAdmin = "ADMIN".equalsIgnoreCase(currentUser.getRole().getName());
@@ -261,6 +303,8 @@ public class TeacherGradingServiceImpl implements TeacherGradingService {
                 .status(attempt.getStatus())
                 .score(attempt.getScore())
                 .maxScore(attempt.getMaxScore())
+                .scoreOnTen(scoreScaleService.normalizeToTen(attempt.getScore(), attempt.getMaxScore(), attempt.getScoreOnTen()))
+                .totalQuestions(paper.getPaperQuestions().size())
                 .startedAt(attempt.getStartedAt())
                 .submittedAt(attempt.getSubmittedAt())
                 .gradedAt(attempt.getGradedAt())

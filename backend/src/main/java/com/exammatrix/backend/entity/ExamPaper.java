@@ -29,6 +29,9 @@ public class ExamPaper {
     @Column(name = "exam_code", length = 10, nullable = false)
     private String examCode;
 
+    @Column(name = "generation_request_id", updatable = false)
+    private UUID generationRequestId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "access_type", length = 20, nullable = false)
     @Builder.Default
@@ -37,6 +40,9 @@ public class ExamPaper {
     @Column(name = "is_published", nullable = false)
     @Builder.Default
     private Boolean isPublished = true;
+
+    @Column(name = "published_at")
+    private LocalDateTime publishedAt;
 
     @Builder.Default
     @OneToMany(

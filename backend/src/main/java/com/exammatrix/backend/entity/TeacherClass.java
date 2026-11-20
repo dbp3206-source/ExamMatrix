@@ -1,5 +1,6 @@
 package com.exammatrix.backend.entity;
 
+import com.exammatrix.backend.entity.enums.ClassJoinMode;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -16,6 +17,8 @@ import java.util.UUID;
 @Entity
 @Table(name = "teacher_classes")
 public class TeacherClass {
+    public static final String JOIN_DISABLED = "!";
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
@@ -30,7 +33,12 @@ public class TeacherClass {
     @Column(name = "class_code", length = 50, nullable = false, unique = true)
     private String classCode;
 
-    @Column(name = "join_password", length = 255, nullable = false)
+    @Enumerated(EnumType.STRING)
+    @Column(name = "join_mode", length = 30, nullable = false)
+    @Builder.Default
+    private ClassJoinMode joinMode = ClassJoinMode.CLOSED;
+
+    @Column(name = "join_password", length = 255)
     private String joinPassword;
 
     @CreationTimestamp
@@ -40,4 +48,34 @@ public class TeacherClass {
     @UpdateTimestamp
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    public ClassJoinMode effectiveJoinMode() {
+        if (joinMode != null && joinMode != ClassJoinMode.CLOSED) {
+            return joinMode;
+        }
+
+        if (joinMode == ClassJoinMode.CLOSED
+                && joinPassword != null
+                && !joinPassword.isBlank()
+                && !JOIN_DISABLED.equals(joinPassword)
+                && joinPassword.startsWith("$2")) {
+            return ClassJoinMode.REQUEST_WITH_PASSWORD;
+        }
+        return joinMode != null ? joinMode : ClassJoinMode.CLOSED;
+    }
+
+    public boolean isJoinEnabled() {
+        ClassJoinMode mode = effectiveJoinMode();
+        if (mode == ClassJoinMode.REQUEST_OPEN) {
+            return true;
+        }
+        if (mode == ClassJoinMode.REQUEST_WITH_PASSWORD) {
+            return joinPassword != null && !joinPassword.isBlank() && !JOIN_DISABLED.equals(joinPassword);
+        }
+        return false;
+    }
+
+    public boolean requiresPassword() {
+        return effectiveJoinMode() == ClassJoinMode.REQUEST_WITH_PASSWORD;
+    }
 }

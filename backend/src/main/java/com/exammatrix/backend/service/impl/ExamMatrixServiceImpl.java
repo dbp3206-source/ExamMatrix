@@ -127,7 +127,7 @@ public class ExamMatrixServiceImpl implements ExamMatrixService {
     public ExamMatrixResponse updateExamMatrix(UUID id, ExamMatrixRequest request) {
         User currentUser = currentUserService.getCurrentUser();
 
-        ExamMatrix matrix = findExamMatrixById(id);
+        ExamMatrix matrix = findExamMatrixForUpdate(id);
 
         checkCanModify(matrix, currentUser);
         validateMatrixNotGenerated(id);
@@ -156,7 +156,7 @@ public class ExamMatrixServiceImpl implements ExamMatrixService {
     public void deleteExamMatrix(UUID id) {
         User currentUser = currentUserService.getCurrentUser();
 
-        ExamMatrix matrix = findExamMatrixById(id);
+        ExamMatrix matrix = findExamMatrixForUpdate(id);
 
         checkCanModify(matrix, currentUser);
         validateMatrixNotGenerated(id);
@@ -178,6 +178,11 @@ public class ExamMatrixServiceImpl implements ExamMatrixService {
                     "Không thể thay đổi examType"
             );
         }
+    }
+
+    private ExamMatrix findExamMatrixForUpdate(UUID id) {
+        return examMatrixRepository.findByIdForUpdate(id).orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy ma trận có ID " + id));
     }
     private void validateMatrixNotGenerated(UUID matrixId){
         if(examPaperRepository.existsByExamMatrix_Id(matrixId)){

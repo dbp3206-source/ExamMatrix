@@ -7,11 +7,13 @@ import com.exammatrix.backend.entity.*;
 import com.exammatrix.backend.entity.enums.Difficulty;
 import com.exammatrix.backend.entity.enums.ExamType;
 import com.exammatrix.backend.entity.enums.QuestionType;
+import com.exammatrix.backend.repository.ExamGenerationRequestRepository;
 import com.exammatrix.backend.repository.ExamMatrixRepository;
 import com.exammatrix.backend.repository.ExamPaperRepository;
 import com.exammatrix.backend.repository.QuestionRepository;
 import com.exammatrix.backend.security.CurrentUserService;
 import com.exammatrix.backend.service.impl.ExamGenerationServiceImpl;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -23,6 +25,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -31,6 +34,9 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class ExamGenerationServiceTest {
+
+    @Mock
+    private ExamGenerationRequestRepository generationRequestRepository;
 
     @Mock
     private ExamPaperRepository examPaperRepository;
@@ -77,7 +83,6 @@ class ExamGenerationServiceTest {
         chapter.setName("Chuong 1: Tong quan");
         chapter.setSubject(subject);
 
-        // Ma tran Trac nghiem (OBJECTIVE)
         matrixObjective = new ExamMatrix();
         matrixObjective.setId(matrixId);
         matrixObjective.setTeacher(teacherUser);
@@ -93,7 +98,6 @@ class ExamGenerationServiceTest {
         configObj.setQuantity(2);
         matrixObjective.addConfig(configObj);
 
-        // Ma tran Tu luan (ESSAY)
         matrixEssay = new ExamMatrix();
         matrixEssay.setId(matrixId);
         matrixEssay.setTeacher(teacherUser);
@@ -114,7 +118,7 @@ class ExamGenerationServiceTest {
     @DisplayName("Sinh đề trắc nghiệm thành công với đủ đáp án và mã đề 6 chữ số")
     void generateExamPapers_Success_Objective() {
         when(currentUserService.getCurrentUser()).thenReturn(teacherUser);
-        when(examMatrixRepository.findById(matrixId)).thenReturn(Optional.of(matrixObjective));
+        when(examMatrixRepository.findByIdForUpdate(matrixId)).thenReturn(Optional.of(matrixObjective));
 
         Question q1 = createQuestion(QuestionType.SINGLE_CHOICE, Difficulty.EASY, "Cau 1?", null);
         q1.addAnswer(createAnswer("Dap an A", true));
@@ -136,7 +140,7 @@ class ExamGenerationServiceTest {
             return paper;
         });
 
-        GenerateExamPapersRequest request = new GenerateExamPapersRequest(2);
+        GenerateExamPapersRequest request = new GenerateExamPapersRequest(BigDecimal.valueOf(2));
         List<ExamPaperDetailResponse> responses = examGenerationService.generateExamPapers(matrixId, request);
 
         assertNotNull(responses);
@@ -162,7 +166,7 @@ class ExamGenerationServiceTest {
     @DisplayName("Sinh đề tự luận thành công có referenceAnswer và answers rỗng []")
     void generateExamPapers_Success_Essay() {
         when(currentUserService.getCurrentUser()).thenReturn(teacherUser);
-        when(examMatrixRepository.findById(matrixId)).thenReturn(Optional.of(matrixEssay));
+        when(examMatrixRepository.findByIdForUpdate(matrixId)).thenReturn(Optional.of(matrixEssay));
 
         Question essayQ = createQuestion(
                 QuestionType.ESSAY,
@@ -183,7 +187,7 @@ class ExamGenerationServiceTest {
             return paper;
         });
 
-        GenerateExamPapersRequest request = new GenerateExamPapersRequest(1);
+        GenerateExamPapersRequest request = new GenerateExamPapersRequest(BigDecimal.ONE);
         List<ExamPaperDetailResponse> responses = examGenerationService.generateExamPapers(matrixId, request);
 
         assertNotNull(responses);
@@ -202,9 +206,9 @@ class ExamGenerationServiceTest {
     @DisplayName("Báo lỗi 404 NOT_FOUND khi không tìm thấy ma trận")
     void generateExamPapers_NotFound() {
         when(currentUserService.getCurrentUser()).thenReturn(teacherUser);
-        when(examMatrixRepository.findById(matrixId)).thenReturn(Optional.empty());
+        when(examMatrixRepository.findByIdForUpdate(matrixId)).thenReturn(Optional.empty());
 
-        GenerateExamPapersRequest request = new GenerateExamPapersRequest(1);
+        GenerateExamPapersRequest request = new GenerateExamPapersRequest(BigDecimal.ONE);
         ResponseStatusException ex = assertThrows(
                 ResponseStatusException.class,
                 () -> examGenerationService.generateExamPapers(matrixId, request)
@@ -221,9 +225,9 @@ class ExamGenerationServiceTest {
         otherTeacher.setRole(teacherRole);
 
         when(currentUserService.getCurrentUser()).thenReturn(otherTeacher);
-        when(examMatrixRepository.findById(matrixId)).thenReturn(Optional.of(matrixObjective));
+        when(examMatrixRepository.findByIdForUpdate(matrixId)).thenReturn(Optional.of(matrixObjective));
 
-        GenerateExamPapersRequest request = new GenerateExamPapersRequest(1);
+        GenerateExamPapersRequest request = new GenerateExamPapersRequest(BigDecimal.ONE);
         ResponseStatusException ex = assertThrows(
                 ResponseStatusException.class,
                 () -> examGenerationService.generateExamPapers(matrixId, request)
@@ -236,15 +240,14 @@ class ExamGenerationServiceTest {
     @DisplayName("Báo lỗi 409 CONFLICT khi kho câu hỏi không đủ số lượng")
     void generateExamPapers_Conflict_NotEnoughQuestions() {
         when(currentUserService.getCurrentUser()).thenReturn(teacherUser);
-        when(examMatrixRepository.findById(matrixId)).thenReturn(Optional.of(matrixObjective));
+        when(examMatrixRepository.findByIdForUpdate(matrixId)).thenReturn(Optional.of(matrixObjective));
 
-        // Ma tran yeu cau 2 cau, nhung kho chi co 1 cau
         Question q1 = createQuestion(QuestionType.SINGLE_CHOICE, Difficulty.EASY, "Cau 1?", null);
         when(questionRepository.findAllByChapter_IdAndDifficultyAndTypeIn(
                 eq(10), eq(Difficulty.EASY), anyList()
         )).thenReturn(List.of(q1));
 
-        GenerateExamPapersRequest request = new GenerateExamPapersRequest(1);
+        GenerateExamPapersRequest request = new GenerateExamPapersRequest(BigDecimal.ONE);
         ResponseStatusException ex = assertThrows(
                 ResponseStatusException.class,
                 () -> examGenerationService.generateExamPapers(matrixId, request)
@@ -255,21 +258,41 @@ class ExamGenerationServiceTest {
 
     @Test
     @DisplayName("Báo lỗi 400 BAD_REQUEST khi số mã đề không nằm trong khoảng 1 đến 20")
-    void generateExamPapers_InvalidNumberOfPapers() {
+    void generateExamPapers_InvalidNumberOfPapers() throws Exception {
         when(currentUserService.getCurrentUser()).thenReturn(teacherUser);
-        when(examMatrixRepository.findById(matrixId)).thenReturn(Optional.of(matrixObjective));
+        when(examMatrixRepository.findByIdForUpdate(matrixId)).thenReturn(Optional.of(matrixObjective));
 
-        GenerateExamPapersRequest request0 = new GenerateExamPapersRequest(0);
-        assertThrows(
+        GenerateExamPapersRequest request0 = new GenerateExamPapersRequest(BigDecimal.ZERO);
+        ResponseStatusException zeroEx = assertThrows(
                 ResponseStatusException.class,
                 () -> examGenerationService.generateExamPapers(matrixId, request0)
         );
+        assertEquals(HttpStatus.BAD_REQUEST, zeroEx.getStatusCode());
 
-        GenerateExamPapersRequest request25 = new GenerateExamPapersRequest(25);
-        assertThrows(
+        GenerateExamPapersRequest request21 = new GenerateExamPapersRequest(BigDecimal.valueOf(21));
+        ResponseStatusException overLimitEx = assertThrows(
                 ResponseStatusException.class,
-                () -> examGenerationService.generateExamPapers(matrixId, request25)
+                () -> examGenerationService.generateExamPapers(matrixId, request21)
         );
+        assertEquals(HttpStatus.BAD_REQUEST, overLimitEx.getStatusCode());
+
+        GenerateExamPapersRequest fractional = new ObjectMapper().readValue(
+                "{\"numberOfPapers\":1.5}",
+                GenerateExamPapersRequest.class
+        );
+        assertEquals(new BigDecimal("1.5"), fractional.getNumberOfPapers());
+        ResponseStatusException fractionalEx = assertThrows(
+                ResponseStatusException.class,
+                () -> examGenerationService.generateExamPapers(matrixId, fractional)
+        );
+        assertEquals(HttpStatus.BAD_REQUEST, fractionalEx.getStatusCode());
+
+        GenerateExamPapersRequest missing = new GenerateExamPapersRequest(null);
+        ResponseStatusException missingEx = assertThrows(
+                ResponseStatusException.class,
+                () -> examGenerationService.generateExamPapers(matrixId, missing)
+        );
+        assertEquals(HttpStatus.BAD_REQUEST, missingEx.getStatusCode());
     }
 
     private Question createQuestion(QuestionType type, Difficulty difficulty, String content, String refAnswer) {

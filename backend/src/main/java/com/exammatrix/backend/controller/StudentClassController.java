@@ -2,6 +2,7 @@ package com.exammatrix.backend.controller;
 
 import com.exammatrix.backend.dto.request.JoinClassRequest;
 import com.exammatrix.backend.dto.response.StudentAssignmentResponse;
+import com.exammatrix.backend.dto.response.StudentClassDiscoveryResponse;
 import com.exammatrix.backend.dto.response.UserResponse;
 import com.exammatrix.backend.service.StudentClassService;
 import jakarta.validation.Valid;
@@ -20,6 +21,11 @@ public class StudentClassController {
     @GetMapping("/teachers")
     public ResponseEntity<List<UserResponse>> getTeachers() {
         return ResponseEntity.ok(studentClassService.getAvailableTeachers());
+    }
+
+    @GetMapping("/classes/discover")
+    public ResponseEntity<StudentClassDiscoveryResponse> getClassDiscovery() {
+        return ResponseEntity.ok(studentClassService.getClassDiscovery());
     }
 
     @PostMapping({"/classes/join", "/teacher-requests"})

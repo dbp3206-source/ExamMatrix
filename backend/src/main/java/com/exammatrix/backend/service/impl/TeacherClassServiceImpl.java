@@ -8,9 +8,11 @@ import com.exammatrix.backend.dto.response.TeacherClassResponse;
 import com.exammatrix.backend.entity.StudentTeacherAssignment;
 import com.exammatrix.backend.entity.TeacherClass;
 import com.exammatrix.backend.entity.User;
+import com.exammatrix.backend.entity.enums.ClassJoinMode;
 import com.exammatrix.backend.entity.enums.StudentAssignmentStatus;
 import com.exammatrix.backend.repository.StudentTeacherAssignmentRepository;
 import com.exammatrix.backend.repository.TeacherClassRepository;
+import com.exammatrix.backend.repository.UserRepository;
 import com.exammatrix.backend.security.CurrentUserService;
 import com.exammatrix.backend.service.TeacherClassService;
 import lombok.RequiredArgsConstructor;
@@ -34,55 +36,40 @@ import java.util.UUID;
 public class TeacherClassServiceImpl implements TeacherClassService {
     private final TeacherClassRepository teacherClassRepository;
     private final StudentTeacherAssignmentRepository assignmentRepository;
+    private final UserRepository userRepository;
     private final CurrentUserService currentUserService;
     private final PasswordEncoder passwordEncoder;
 
     @Override
     @Transactional
     public TeacherClassResponse getOrCreateCurrentTeacherClass() {
-        User teacher = currentUserService.getCurrentUser();
+        User teacher = currentUserService.getCurrentUserForUpdate();
         TeacherClass teacherClass = teacherClassRepository.findByTeacher_Id(teacher.getId())
                 .orElseGet(() -> {
-                    String initialCode = "CLASS_" + teacher.getUsername().toUpperCase(Locale.ROOT);
-                    if (teacherClassRepository.existsByClassCode(initialCode)) {
-                        initialCode = initialCode + "_" + System.currentTimeMillis() % 10000;
-                    }
                     TeacherClass newClass = TeacherClass.builder()
                             .teacher(teacher)
-                            .name("Lớp của " + teacher.getFullName())
-                            .classCode(initialCode)
-                            .joinPassword(passwordEncoder.encode("123456"))
+                            .name("Lớp mới")
+                            .classCode("CLASS_" + UUID.randomUUID().toString().replace("-", "").toUpperCase(Locale.ROOT))
+                            .joinMode(ClassJoinMode.CLOSED)
+                            .joinPassword(null)
                             .build();
                     return teacherClassRepository.save(newClass);
                 });
 
-        long count = assignmentRepository.countByTeacherClass_IdAndStatus(
-                teacherClass.getId(),
-                StudentAssignmentStatus.APPROVED
-        );
-
-        return TeacherClassResponse.builder()
-                .id(teacherClass.getId())
-                .teacherId(teacher.getId())
-                .teacherName(teacher.getFullName())
-                .name(teacherClass.getName())
-                .classCode(teacherClass.getClassCode())
-                .studentCount(count)
-                .hasPassword(StringUtils.hasText(teacherClass.getJoinPassword()))
-                .createdAt(teacherClass.getCreatedAt())
-                .build();
+        return toTeacherClassResponse(teacherClass, teacher);
     }
 
     @Override
     @Transactional
     public TeacherClassResponse updateCurrentTeacherClass(UpdateTeacherClassRequest request) {
-        User teacher = currentUserService.getCurrentUser();
+        User teacher = currentUserService.getCurrentUserForUpdate();
         TeacherClass teacherClass = teacherClassRepository.findByTeacher_Id(teacher.getId())
                 .orElseGet(() -> TeacherClass.builder()
                         .teacher(teacher)
                         .name(request.getName().trim())
                         .classCode(request.getClassCode().trim().toUpperCase(Locale.ROOT))
-                        .joinPassword(passwordEncoder.encode("123456"))
+                        .joinMode(ClassJoinMode.CLOSED)
+                        .joinPassword(null)
                         .build()
                 );
 
@@ -95,26 +82,38 @@ public class TeacherClassServiceImpl implements TeacherClassService {
 
         teacherClass.setName(request.getName().trim());
         teacherClass.setClassCode(normalizedCode);
-        if (StringUtils.hasText(request.getPassword())) {
-            teacherClass.setJoinPassword(passwordEncoder.encode(request.getPassword().trim()));
+
+        ClassJoinMode requestedMode = request.getJoinMode();
+        if (requestedMode == null) {
+            if (StringUtils.hasText(request.getPassword())) {
+                requestedMode = ClassJoinMode.REQUEST_WITH_PASSWORD;
+            } else {
+                requestedMode = teacherClass.effectiveJoinMode();
+            }
+        }
+
+        if (requestedMode == ClassJoinMode.CLOSED) {
+            teacherClass.setJoinMode(ClassJoinMode.CLOSED);
+            teacherClass.setJoinPassword(null);
+        } else if (requestedMode == ClassJoinMode.REQUEST_OPEN) {
+            teacherClass.setJoinMode(ClassJoinMode.REQUEST_OPEN);
+            teacherClass.setJoinPassword(null);
+        } else {
+
+            if (StringUtils.hasText(request.getPassword())) {
+                if ("123456".equals(request.getPassword().trim())) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Hãy đặt mật khẩu lớp khác mật khẩu mặc định cũ");
+                }
+                teacherClass.setJoinPassword(passwordEncoder.encode(request.getPassword().trim()));
+            } else if (!StringUtils.hasText(teacherClass.getJoinPassword())
+                    || TeacherClass.JOIN_DISABLED.equals(teacherClass.getJoinPassword())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vui lòng nhập mật khẩu lớp khi bật chế độ yêu cầu mật khẩu");
+            }
+            teacherClass.setJoinMode(ClassJoinMode.REQUEST_WITH_PASSWORD);
         }
 
         TeacherClass saved = teacherClassRepository.save(teacherClass);
-        long count = assignmentRepository.countByTeacherClass_IdAndStatus(
-                saved.getId(),
-                StudentAssignmentStatus.APPROVED
-        );
-
-        return TeacherClassResponse.builder()
-                .id(saved.getId())
-                .teacherId(teacher.getId())
-                .teacherName(teacher.getFullName())
-                .name(saved.getName())
-                .classCode(saved.getClassCode())
-                .studentCount(count)
-                .hasPassword(true)
-                .createdAt(saved.getCreatedAt())
-                .build();
+        return toTeacherClassResponse(saved, teacher);
     }
 
     @Override
@@ -155,13 +154,67 @@ public class TeacherClassServiceImpl implements TeacherClassService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền duyệt yêu cầu của giáo viên khác");
         }
 
+        userRepository.findByIdForUpdate(assignment.getStudent().getId());
+
+        LocalDateTime now = LocalDateTime.now();
+
+        if (request.getStatus() == StudentAssignmentStatus.APPROVED) {
+
+            List<StudentTeacherAssignment> existingApproved = assignmentRepository
+                    .findByStudent_IdAndStatus(assignment.getStudent().getId(), StudentAssignmentStatus.APPROVED);
+            boolean transitionedOld = false;
+            String newClassName = assignment.getTeacherClass() != null
+                    ? assignment.getTeacherClass().getName()
+                    : assignment.getTeacher().getFullName();
+            for (StudentTeacherAssignment oldAssignment : existingApproved) {
+                if (!oldAssignment.getId().equals(assignment.getId())) {
+                    oldAssignment.setStatus(StudentAssignmentStatus.TRANSFERRED);
+                    oldAssignment.setReviewedAt(now);
+                    oldAssignment.setReviewedBy(currentUser);
+                    oldAssignment.setDecisionNote("Đã chuyển sang lớp " + newClassName);
+                    assignmentRepository.save(oldAssignment);
+                    transitionedOld = true;
+                }
+            }
+            if (transitionedOld) {
+
+                assignmentRepository.flush();
+            }
+        }
+
         assignment.setStatus(request.getStatus());
-        assignment.setReviewedAt(LocalDateTime.now());
+        assignment.setReviewedAt(now);
         assignment.setReviewedBy(currentUser);
-        assignment.setDecisionNote(request.getDecisionNote());
+        if (StringUtils.hasText(request.getDecisionNote())) {
+            assignment.setDecisionNote(request.getDecisionNote().trim());
+        }
 
         StudentTeacherAssignment saved = assignmentRepository.save(assignment);
         return toAssignmentResponse(saved);
+    }
+
+    private TeacherClassResponse toTeacherClassResponse(TeacherClass teacherClass, User teacher) {
+        long count = assignmentRepository.countByTeacherClass_IdAndStatus(
+                teacherClass.getId(),
+                StudentAssignmentStatus.APPROVED
+        );
+        ClassJoinMode mode = teacherClass.effectiveJoinMode();
+        boolean hasPassword = mode == ClassJoinMode.REQUEST_WITH_PASSWORD
+                && StringUtils.hasText(teacherClass.getJoinPassword())
+                && !TeacherClass.JOIN_DISABLED.equals(teacherClass.getJoinPassword())
+                && !passwordEncoder.matches("123456", teacherClass.getJoinPassword());
+
+        return TeacherClassResponse.builder()
+                .id(teacherClass.getId())
+                .teacherId(teacher.getId())
+                .teacherName(teacher.getFullName())
+                .name(teacherClass.getName())
+                .classCode(teacherClass.getClassCode())
+                .joinMode(mode)
+                .studentCount(count)
+                .hasPassword(hasPassword)
+                .createdAt(teacherClass.getCreatedAt())
+                .build();
     }
 
     private StudentAssignmentResponse toAssignmentResponse(StudentTeacherAssignment assignment) {

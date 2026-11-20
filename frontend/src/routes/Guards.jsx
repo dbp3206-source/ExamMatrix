@@ -1,11 +1,31 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
-import { useAuth } from '../auth/AuthContext'
-import { ErrorState, LoadingState } from '../components/UI'
+import { useAuth } from '@/auth/AuthContext'
+import { ErrorState, LoadingState } from '@/components/common/StateFeedback'
+import { Button } from '@/components/ui/button'
 
 export function ProtectedRoute() {
-  const { isAuthenticated, isChecking, authError, retrySession, logout } = useAuth(); const location = useLocation()
-  if (isChecking) return <LoadingState label="Đang kiểm tra phiên đăng nhập..." />
-  if (authError) return <><ErrorState error={authError} onRetry={retrySession} /><button className="button secondary" onClick={logout}>Về đăng nhập</button></>
+  const { isAuthenticated, isChecking, authError, retrySession, logout } = useAuth()
+  const location = useLocation()
+
+  if (isChecking) {
+    return (
+      <div className="mx-auto max-w-md py-20 px-4">
+        <LoadingState label="Đang kiểm tra phiên đăng nhập..." />
+      </div>
+    )
+  }
+
+  if (authError) {
+    return (
+      <div className="mx-auto max-w-md space-y-4 py-20 px-4 text-center">
+        <ErrorState error={authError} onRetry={retrySession} />
+        <Button variant="outline" onClick={logout}>
+          Về đăng nhập
+        </Button>
+      </div>
+    )
+  }
+
   return isAuthenticated ? <Outlet /> : <Navigate to="/dang-nhap" replace state={{ from: location }} />
 }
 
@@ -14,9 +34,14 @@ export function AdminRoute() {
   return user?.role === 'ADMIN' ? <Outlet /> : <Navigate to="/403" replace />
 }
 
+export function TeacherOnlyRoute() {
+  const { user } = useAuth()
+  return user?.role === 'TEACHER' ? <Outlet /> : <Navigate to="/403" replace />
+}
+
 export function TeacherOrAdminRoute() {
   const { user } = useAuth()
-  return (user?.role === 'TEACHER' || user?.role === 'ADMIN') ? <Outlet /> : <Navigate to="/403" replace />
+  return user?.role === 'TEACHER' || user?.role === 'ADMIN' ? <Outlet /> : <Navigate to="/403" replace />
 }
 
 export function StudentRoute() {

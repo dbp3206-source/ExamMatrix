@@ -42,6 +42,7 @@ public class JwtService {
             )
             .subject(user.getUsername())
             .claim("userId", user.getId().toString())
+            .claim("sessionVersion", user.sessionVersionClaim())
             .claim("authorities", List.of(authority))
             .build();
 

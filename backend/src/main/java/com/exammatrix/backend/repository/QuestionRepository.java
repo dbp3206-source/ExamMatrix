@@ -132,4 +132,49 @@ public interface QuestionRepository extends JpaRepository<Question, UUID> {
     );
 
     long countByDifficulty(Difficulty difficulty);
+
+    @Query("""
+        SELECT q.type, q.difficulty, COUNT(q)
+        FROM Question q
+        GROUP BY q.type, q.difficulty
+        ORDER BY q.type, q.difficulty
+        """)
+    List<Object[]> countByTypeAndDifficulty();
+
+    @Query("""
+        SELECT s.id, s.name, COUNT(DISTINCT c.id), COUNT(q.id),
+               COUNT(DISTINCT CASE WHEN q.id IS NULL THEN c.id ELSE NULL END)
+        FROM Subject s
+        LEFT JOIN Chapter c ON c.subject = s
+        LEFT JOIN Question q ON q.chapter = c
+        GROUP BY s.id, s.name
+        ORDER BY s.name
+        """)
+    List<Object[]> summarizeCoverageBySubject();
+
+    boolean existsByChapter_Id(Integer chapterId);
+
+    @Query("""
+        SELECT s.id, s.name, COUNT(q.id)
+        FROM Question q
+        JOIN q.chapter c
+        JOIN c.subject s
+        WHERE q.teacher.id = :teacherId
+        GROUP BY s.id, s.name
+        ORDER BY COUNT(q.id) DESC, lower(s.name) ASC
+        """)
+    List<Object[]> countBySubjectForTeacher(@Param("teacherId") UUID teacherId);
+
+    @Query("""
+        SELECT q.difficulty, COUNT(q.id)
+        FROM Question q
+        JOIN q.chapter c
+        WHERE q.teacher.id = :teacherId
+          AND c.subject.id = :subjectId
+        GROUP BY q.difficulty
+        """)
+    List<Object[]> countByDifficultyForTeacherAndSubject(
+            @Param("teacherId") UUID teacherId,
+            @Param("subjectId") Integer subjectId
+    );
 }

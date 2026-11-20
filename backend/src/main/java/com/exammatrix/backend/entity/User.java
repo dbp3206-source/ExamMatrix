@@ -30,6 +30,20 @@ public class User {
     @Column(name = "password", length = 255, nullable = false)
     private String password;
 
+    @Column(name = "google_subject", length = 255, unique = true)
+    private String googleSubject;
+
+    @Column(name = "session_version")
+    private UUID sessionVersion;
+
+    public String sessionVersionClaim() {
+        return sessionVersion == null ? "0" : sessionVersion.toString();
+    }
+
+    public void invalidateSessions() {
+        sessionVersion = UUID.randomUUID();
+    }
+
     @Column(name = "full_name", length = 100, nullable = false)
     private String fullName;
 

@@ -43,7 +43,7 @@ const read = () => {
 }
 const write = (db) => localStorage.setItem(STORAGE_KEY, JSON.stringify(db))
 const publicUser = ({ password: _password, ...user }) => user
-const fail = (message, fieldErrors = {}) => Promise.reject({ message, fieldErrors })
+const fail = (message, fieldErrors = {}, status = 400) => Promise.reject({ message, fieldErrors, status })
 const page = (items, params = {}) => {
   const current = Math.max(Number(params.page) || 0, 0)
   const size = Math.max(Number(params.size) || 10, 1)
@@ -74,10 +74,12 @@ const validateQuestion = (body) => {
 export const mockApi = {
   async login(body) {
     const user = read().users.find((item) => item.username === body.username && item.password === body.password)
-    if (!user) return fail('Tên đăng nhập hoặc mật khẩu không đúng')
-    if (user.status !== 'ACTIVE') return fail('Tài khoản đã bị khóa')
+    if (!user) return fail('Username hoặc password không chính xác', {}, 401)
+    if (user.status !== 'ACTIVE') return fail('Tài khoản đã bị khóa', {}, 423)
     return wait({ accessToken: `mock-token-${user.id}`, user: publicUser(user) }, 450)
   },
+  googleStudentChallenge: () => fail('Đăng nhập Google chưa được cấu hình ở chế độ mô phỏng', {}, 503),
+  googleStudentLogin: () => fail('Đăng nhập Google chưa được cấu hình ở chế độ mô phỏng', {}, 503),
   me: () => {
     const token = localStorage.getItem('exam_access_token')
     const user = read().users.find((item) => token === `mock-token-${item.id}`)
@@ -209,21 +211,250 @@ export const mockApi = {
   async deleteMatrix(id) { const db = read(); if (db.papers.some((p) => p.matrixId === id)) return fail('Không thể xóa ma trận đã sinh đề'); db.matrices = db.matrices.filter((item) => item.id !== id); write(db); return wait({ success: true }) },
   async generatePapers(id, body) {
     const db = read(); const matrix = normalizeMatrix(db.matrices.find((item) => item.id === id))
-    if (!matrix) return fail('Không tìm thấy ma trận')
-    for (const config of matrix.configs) if (db.questions.filter((q) => q.chapterId === config.chapterId && q.difficulty === config.difficulty && matchesExamType(q, matrix.examType)).length < config.quantity) return fail('Số câu hỏi khả dụng không đủ để sinh đề')
+    if (!matrix) return fail('Không tìm thấy ma trận', {}, 404)
+    if (body.requestId) {
+      const previous = db.papers.filter((p) => p.matrixId === id && p.generationRequestId === body.requestId)
+      if (previous.length > 0) {
+        if (previous.length !== Number(body.numberOfPapers)) {
+          return fail('Yêu cầu sinh đề đã được dùng với bộ mã khác', {}, 409)
+        }
+        return wait(previous.map(normalizePaper), 200)
+      }
+    }
+    for (const config of matrix.configs) if (db.questions.filter((q) => q.chapterId === config.chapterId && q.difficulty === config.difficulty && matchesExamType(q, matrix.examType)).length < config.quantity) return fail('Số câu hỏi khả dụng không đủ để sinh đề', {}, 409)
     const existing = db.papers.filter((p) => p.matrixId === id).length
     const generated = Array.from({ length: Number(body.numberOfPapers) }, (_, index) => {
-      const questions = matrix.configs.flatMap((config) => db.questions.filter((q) => q.chapterId === config.chapterId && q.difficulty === config.difficulty && matchesExamType(q, matrix.examType)).sort(() => Math.random() - 0.5).slice(0, config.quantity)).sort(() => Math.random() - 0.5).map((q, order) => ({ id: q.id, questionOrder: order + 1, content: q.content, type: q.type, difficulty: q.difficulty, answers: q.type === 'ESSAY' ? [] : (q.answers || []).map((answer) => ({ ...answer })).sort(() => Math.random() - 0.5), referenceAnswer: q.referenceAnswer ?? null }))
-      return { id: newId(), matrixId: id, examCode: `M${String(existing + index + 1).padStart(2, '0')}`, createdAt: new Date().toISOString(), questions }
+      const questions = matrix.configs.flatMap((config) => db.questions.filter((q) => q.chapterId === config.chapterId && q.difficulty === config.difficulty && matchesExamType(q, matrix.examType)).sort(() => Math.random() - 0.5).slice(0, config.quantity)).sort(() => Math.random() - 0.5).map((q, order) => ({ id: q.id, questionOrder: order + 1, content: q.content, type: q.type, difficulty: q.difficulty, points: 1, answers: q.type === 'ESSAY' ? [] : (q.answers || []).map((answer) => ({ ...answer })).sort(() => Math.random() - 0.5), referenceAnswer: q.referenceAnswer ?? null }))
+      return {
+        id: newId(),
+        matrixId: id,
+        generationRequestId: body.requestId || null,
+        examCode: `M${String(existing + index + 1).padStart(2, '0')}`,
+        accessType: 'PRIVATE',
+        isPublished: false,
+        createdAt: new Date().toISOString(),
+        questions,
+      }
     })
     db.papers.push(...generated); write(db); return wait(generated, 600)
   },
+  async getGenerationAdvice() {
+    return wait({
+      recommended: false,
+      reasonCode: 'INSUFFICIENT_DATA',
+      reasonMessage: 'Chưa đủ dữ liệu lớp học để gợi ý điều chỉnh.',
+      snapshotVersion: 'mock-none',
+    }, 150)
+  },
   async getPapers(params = {}) { let items = read().papers.map(normalizePaper); if (params.matrixId) items = items.filter((item) => item.matrixId === params.matrixId); return wait(page(items, params)) },
+  async getPaperSummaries(params = {}) {
+    const db = read()
+    let items = db.papers.map((raw) => {
+      const normalized = normalizePaper(raw)
+      const matrix = db.matrices.find((m) => m.id === normalized.matrixId)
+      const subject = db.subjects.find((s) => s.id === matrix?.subjectId)
+      return {
+        id: normalized.id,
+        matrixId: normalized.matrixId,
+        matrixTitle: matrix?.title || 'Đề thi chuẩn hóa',
+        subjectId: matrix?.subjectId ?? null,
+        subjectCode: subject?.code || '',
+        subjectName: subject?.name || '',
+        examType: matrix?.examType || 'OBJECTIVE',
+        examCode: normalized.examCode,
+        accessType: normalized.accessType,
+        isPublished: Boolean(normalized.isPublished),
+        createdAt: normalized.createdAt,
+        questionCount: normalized.questions?.length || 0,
+      }
+    })
+    if (params.matrixId) items = items.filter((item) => String(item.matrixId) === String(params.matrixId))
+    if (params.subjectId) items = items.filter((item) => String(item.subjectId) === String(params.subjectId))
+    if (params.examType) items = items.filter((item) => item.examType === params.examType)
+    if (params.accessType) items = items.filter((item) => item.accessType === params.accessType)
+    if (params.isPublished !== undefined && params.isPublished !== '' && params.isPublished !== null) {
+      const wanted = String(params.isPublished) === 'true'
+      items = items.filter((item) => Boolean(item.isPublished) === wanted)
+    }
+    if (params.search && String(params.search).trim()) {
+      const q = String(params.search).trim().toLowerCase()
+      items = items.filter((item) =>
+        `${item.examCode} ${item.matrixTitle} ${item.subjectName} ${item.subjectCode}`.toLowerCase().includes(q)
+      )
+    }
+    return wait(page(items, { page: params.page ?? 0, size: params.size ?? 20 }))
+  },
   getPaper: (id) => wait(normalizePaper(read().papers.find((item) => item.id === id))),
   async deletePaper(id) { const db = read(); db.papers = db.papers.filter((item) => item.id !== id); write(db); return wait({ success: true }) },
   async getDashboard() {
     const db = read(); const difficulty = ['EASY', 'MEDIUM', 'HARD'].map((key) => ({ difficulty: key, count: db.questions.filter((q) => q.difficulty === key).length }))
     return wait({ totalSubjects: db.subjects.length, totalChapters: db.chapters.length, totalQuestions: db.questions.length, totalMatrices: db.matrices.length, totalPapers: db.papers.length, difficulty, recentMatrices: [...db.matrices].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))).slice(0, 5) })
+  },
+  async getDashboardAnalytics() {
+    const db = read()
+    const currentUser = JSON.parse(localStorage.getItem('exam_current_user') || '{}')
+    const now = new Date()
+    const shared = {
+      role: currentUser.role,
+      generatedAt: now.toISOString(),
+      scope: 'Dữ liệu mô phỏng lưu trong trình duyệt',
+      period: 'Các con số được tính từ bộ dữ liệu mẫu hiện có',
+    }
+    if (currentUser.role === 'ADMIN') {
+      const subjectCoverage = db.subjects.map((subject) => {
+        const chapters = db.chapters.filter((chapter) => chapter.subjectId === subject.id)
+        const questionCount = db.questions.filter((question) => chapters.some((chapter) => chapter.id === question.chapterId)).length
+        const emptyCount = chapters.filter((chapter) => !db.questions.some((question) => question.chapterId === chapter.id)).length
+        return { subjectId: subject.id, subjectName: subject.name, chapterCount: chapters.length, questionCount, chaptersWithoutQuestions: emptyCount }
+      })
+      const paperTimeline = Array.from({ length: 6 }, (_, index) => {
+        const monthDate = new Date(now.getFullYear(), now.getMonth() - 5 + index, 1)
+        const month = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}`
+        const count = db.papers.filter((paper) => String(paper.createdAt || '').slice(0, 7) === month).length
+        return { month, count }
+      })
+      const paperVisibility = ['PUBLIC', 'PRIVATE'].flatMap((accessType) => [false, true].map((published) => ({
+        accessType,
+        published,
+        count: db.papers.filter((paper) => paper.accessType === accessType && Boolean(paper.isPublished) === published).length,
+      })))
+      const userStates = [...new Set(db.users.map((user) => user.role))].flatMap((role) =>
+        [...new Set(db.users.map((user) => user.status))].map((status) => ({
+          role,
+          status,
+          count: db.users.filter((user) => user.role === role && user.status === status).length,
+        }))
+      )
+      return wait({ ...shared, subjectCoverage, paperTimeline, paperVisibility, userStates })
+    }
+
+    if (currentUser.role === 'TEACHER') {
+      const questionDistribution = ['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'TRUE_FALSE', 'ESSAY'].flatMap((type) =>
+        ['EASY', 'MEDIUM', 'HARD'].map((difficulty) => ({
+          type,
+          difficulty,
+          count: db.questions.filter((question) => question.type === type && question.difficulty === difficulty).length,
+        }))
+      )
+      const scoreAttempts = db.attempts
+        .filter((attempt) => attempt.teacherId === currentUser.id && attempt.status === 'COMPLETED' && attempt.score != null && Number(attempt.maxScore) > 0)
+        .sort((a, b) => String(b.gradedAt || '').localeCompare(String(a.gradedAt || '')))
+        .slice(0, 500)
+      const scoreDistribution = [
+        { key: 'band-0', label: '0–<2', lowerBound: 0, upperBound: 2, includesUpperBound: false, count: 0 },
+        { key: 'band-1', label: '2–<4', lowerBound: 2, upperBound: 4, includesUpperBound: false, count: 0 },
+        { key: 'band-2', label: '4–<6', lowerBound: 4, upperBound: 6, includesUpperBound: false, count: 0 },
+        { key: 'band-3', label: '6–<8', lowerBound: 6, upperBound: 8, includesUpperBound: false, count: 0 },
+        { key: 'band-4', label: '8–<10', lowerBound: 8, upperBound: 10, includesUpperBound: false, count: 0 },
+        { key: 'band-5', label: '10', lowerBound: 10, upperBound: 10, includesUpperBound: true, count: 0 },
+      ]
+      let scoreSampleCount = 0
+      let invalidScoreCount = 0
+      for (const attempt of scoreAttempts) {
+        const score = Number(attempt.score)
+        const maximum = Number(attempt.maxScore)
+        if (!Number.isFinite(score) || score < 0 || score > maximum) {
+          invalidScoreCount++
+          continue
+        }
+        const onTen = score * 10 / maximum
+        const index = onTen === 10 ? 5 : Math.min(4, Math.floor(onTen / 2))
+        scoreDistribution[index].count++
+        scoreSampleCount++
+      }
+      const pending = db.attempts
+        .filter((attempt) => attempt.status === 'WAITING_GRADING' && (currentUser.role === 'ADMIN' || attempt.teacherId === currentUser.id))
+        .sort((a, b) => String(a.submittedAt || '').localeCompare(String(b.submittedAt || '')))
+      const gradingQueue = {
+        content: pending.slice(0, 5).map((attempt) => {
+          const student = db.users.find((user) => user.id === attempt.studentId)
+          const paper = db.papers.find((item) => item.id === attempt.paperId)
+          const matrix = db.matrices.find((item) => item.id === paper?.matrixId)
+          return { attemptId: attempt.id, paperId: attempt.paperId, paperTitle: matrix?.title, studentId: attempt.studentId, studentName: student?.fullName, studentEmail: student?.email, submittedAt: attempt.submittedAt, status: attempt.status, examType: matrix?.examType }
+        }),
+        page: 0,
+        size: 5,
+        totalElements: pending.length,
+        totalPages: Math.ceil(pending.length / 5),
+      }
+      return wait({
+        ...shared,
+        scope: 'Ngân hàng mẫu dùng chung; lượt làm của đề bạn tạo',
+        period: 'Tối đa 500 lượt đã chấm gần nhất; lớp tại thời điểm thi không được lưu',
+        questionDistribution,
+        scoreDistribution,
+        scoreSampleCount,
+        scoreSourceCount: db.attempts.filter((attempt) => attempt.teacherId === currentUser.id && attempt.status === 'COMPLETED' && attempt.score != null && Number(attempt.maxScore) > 0).length,
+        scoreSampleLimit: 500,
+        invalidScoreCount,
+        gradingQueue,
+      })
+    }
+
+    const attempts = db.attempts
+      .filter((attempt) => attempt.studentId === currentUser.id)
+      .sort((a, b) => String(b.startedAt || '').localeCompare(String(a.startedAt || '')))
+      .slice(0, 20)
+    const studentAttempts = attempts.map((attempt) => {
+      const paper = db.papers.find((item) => item.id === attempt.paperId)
+      const matrix = db.matrices.find((item) => item.id === paper?.matrixId)
+      const subject = db.subjects.find((item) => item.id === matrix?.subjectId)
+      return {
+        attemptId: attempt.id,
+        paperId: attempt.paperId,
+        paperTitle: matrix?.title,
+        examCode: paper?.examCode,
+        subjectId: subject?.id,
+        subjectName: subject?.name,
+        status: attempt.status,
+        score: attempt.status === 'COMPLETED' ? attempt.score : null,
+        maxScore: attempt.maxScore,
+        startedAt: attempt.startedAt,
+        submittedAt: attempt.submittedAt,
+        gradedAt: attempt.gradedAt,
+      }
+    })
+    const subjectGroups = new Map()
+    for (const item of studentAttempts) {
+      if (item.status !== 'COMPLETED' || item.score == null || Number(item.maxScore) <= 0 || Number(item.score) < 0 || Number(item.score) > Number(item.maxScore)) continue
+      const group = subjectGroups.get(item.subjectId) || { subjectId: item.subjectId, subjectName: item.subjectName, attemptCount: 0, earnedScore: 0, maximumScore: 0 }
+      group.attemptCount++
+      group.earnedScore += Number(item.score)
+      group.maximumScore += Number(item.maxScore)
+      subjectGroups.set(item.subjectId, group)
+    }
+    const studentSubjectResults = [...subjectGroups.values()].map((group) => ({
+      ...group,
+      averageOnTen: Math.round((group.earnedScore * 1000) / group.maximumScore) / 100,
+    }))
+    const chapterGroups = new Map()
+    for (const attempt of attempts.filter((item) => item.status === 'COMPLETED')) {
+      const paper = db.papers.find((item) => item.id === attempt.paperId)
+      const matrix = db.matrices.find((item) => item.id === paper?.matrixId)
+      const subject = db.subjects.find((item) => item.id === matrix?.subjectId)
+      for (const answer of attempt.gradedAnswers || []) {
+        if (typeof answer.isCorrect !== 'boolean') continue
+        const question = db.questions.find((item) => item.id === answer.questionId)
+        const chapter = db.chapters.find((item) => item.id === question?.chapterId)
+        if (!chapter) continue
+        const key = `${subject?.id}:${chapter.id}`
+        const group = chapterGroups.get(key) || { subjectId: subject?.id, subjectName: subject?.name, chapterId: chapter.id, chapterName: chapter.name, answeredCount: 0, correctCount: 0, incorrectCount: 0 }
+        group.answeredCount++
+        if (answer.isCorrect) group.correctCount++
+        else group.incorrectCount++
+        chapterGroups.set(key, group)
+      }
+    }
+    return wait({
+      ...shared,
+      scope: 'Chỉ dữ liệu của tài khoản hiện tại',
+      period: '20 lượt làm gần nhất; bản đồ chương chỉ gồm câu trắc nghiệm đã tự động chấm',
+      studentAttempts,
+      studentAttemptTotal: db.attempts.filter((attempt) => attempt.studentId === currentUser.id).length,
+      studentSubjectResults,
+      studentChapterProgress: [...chapterGroups.values()],
+      studentChapterAnswerCount: [...chapterGroups.values()].reduce((sum, group) => sum + group.answeredCount, 0),
+    })
   },
   async registerStudent(body) {
     const db = read()
@@ -264,16 +495,27 @@ export const mockApi = {
   },
   async createTeacherRequest(body) {
     const db = read(); const currentUser = JSON.parse(localStorage.getItem('exam_current_user') || '{}')
-    let cls = db.classes.find((c) => (body.teacherId && c.teacherId === body.teacherId) || (body.classCode && c.classCode === body.classCode))
-    if (!cls && body.teacherId) {
+    const normalizedCode = body.classCode ? body.classCode.trim().toUpperCase() : ''
+    let cls = null
+    if (normalizedCode) {
+      cls = db.classes.find((c) => c.classCode === normalizedCode) || null
+    } else if (body.teacherId) {
+      cls = db.classes.find((c) => c.teacherId === body.teacherId) || null
+    }
+    if (!cls && !normalizedCode && body.teacherId) {
       const teacher = db.users.find((u) => u.id === body.teacherId)
       if (teacher) {
         cls = { id: newId(), teacherId: teacher.id, name: `Lớp của ${teacher.fullName}`, classCode: `CLASS_${teacher.username.toUpperCase()}`, joinPassword: '123', createdAt: new Date().toISOString() }
         db.classes.push(cls)
       }
     }
-    if (!cls) return fail('Không tìm thấy lớp học của giáo viên')
-    if (body.password && body.password !== cls.joinPassword) return fail('Mật khẩu lớp học không chính xác')
+    if (!cls) return fail('Không tìm thấy lớp học hoặc giáo viên tương ứng', {}, 404)
+    if (body.teacherId && cls.teacherId !== body.teacherId) {
+      return fail('Không tìm thấy lớp học phù hợp', {}, 404)
+    }
+    if (!cls.joinPassword || body.password === '123456' || body.password !== cls.joinPassword) {
+      return fail('Mật khẩu lớp học không chính xác hoặc lớp chưa mở', {}, 400)
+    }
 
     let assignment = db.assignments.find((a) => a.studentId === currentUser.id)
     const teacher = db.users.find((u) => u.id === cls.teacherId)
@@ -647,13 +889,44 @@ export const mockApi = {
   async completeGrading(attemptId, _body) {
     const db = read()
     const attempt = db.attempts.find((a) => a.id === attemptId)
-    if (!attempt) return fail('Không tìm thấy bài thi')
+    if (!attempt) return fail('Không tìm thấy bài thi', {}, 404)
     const sum = (attempt.gradedAnswers || []).reduce((acc, a) => acc + (Number(a.awardedScore) || 0), 0)
-    attempt.score = sum
-    attempt.status = 'COMPLETED'
-    attempt.gradedAt = new Date().toISOString()
-    write(db)
-    return wait({ success: true })
+    if (attempt.status !== 'COMPLETED') {
+      attempt.score = Math.round(sum * 100) / 100
+      attempt.status = 'COMPLETED'
+      attempt.gradedAt = new Date().toISOString()
+      write(db)
+    }
+    const paper = db.papers.find((p) => p.id === attempt.paperId)
+    const matrix = db.matrices.find((m) => m.id === paper?.matrixId)
+    const subject = db.subjects.find((s) => s.id === matrix?.subjectId)
+    return wait({
+      attemptId: attempt.id,
+      paperId: paper?.id,
+      examCode: paper?.examCode,
+      paperTitle: matrix?.title,
+      subjectName: subject?.name,
+      examType: matrix?.examType,
+      status: attempt.status,
+      score: attempt.score,
+      maxScore: attempt.maxScore,
+      startedAt: attempt.startedAt,
+      submittedAt: attempt.submittedAt,
+      gradedAt: attempt.gradedAt,
+      answers: (attempt.gradedAnswers || []).map((a) => ({
+        attemptAnswerId: a.questionId,
+        questionId: a.questionId,
+        questionOrder: a.questionOrder,
+        content: a.content,
+        type: a.type,
+        maxScore: a.points,
+        selectedAnswerIds: a.selectedAnswerIds || [],
+        essayAnswer: a.essayAnswer,
+        awardedScore: a.awardedScore,
+        feedback: a.feedback,
+        isCorrect: a.isCorrect,
+      })),
+    })
   },
   async updatePaperAccess(id, body) {
     const db = read()
@@ -722,5 +995,30 @@ export const mockApi = {
     })
     write(db)
     return wait(saved)
+  },
+  async getStudentExamSubjects() {
+    return wait([])
+  },
+  async getAdminResultUsers(params) {
+    const db = read()
+    const role = params?.role
+    const search = String(params?.search || '').toLowerCase()
+    return wait(
+      db.users
+        .filter((u) => (!role || u.role === role) && (!search || u.fullName?.toLowerCase().includes(search) || u.username?.toLowerCase().includes(search)))
+        .map(publicUser),
+    )
+  },
+  async getAdminTeacherEssays() {
+    return wait({ content: [], page: 0, size: 10, totalElements: 0, totalPages: 0 })
+  },
+  async getAdminTeacherObjectives() {
+    return wait({ content: [], page: 0, size: 10, totalElements: 0, totalPages: 0 })
+  },
+  async getAdminStudentResults() {
+    return wait({ content: [], page: 0, size: 10, totalElements: 0, totalPages: 0 })
+  },
+  async getStudentClassDiscovery() {
+    return wait({ activeAssignment: null, pendingAssignment: null, latestAssignment: null, history: [], availableClasses: [] })
   },
 }

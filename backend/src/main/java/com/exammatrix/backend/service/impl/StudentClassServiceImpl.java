@@ -2,10 +2,12 @@ package com.exammatrix.backend.service.impl;
 
 import com.exammatrix.backend.dto.request.JoinClassRequest;
 import com.exammatrix.backend.dto.response.StudentAssignmentResponse;
+import com.exammatrix.backend.dto.response.StudentClassDiscoveryResponse;
 import com.exammatrix.backend.dto.response.UserResponse;
 import com.exammatrix.backend.entity.StudentTeacherAssignment;
 import com.exammatrix.backend.entity.TeacherClass;
 import com.exammatrix.backend.entity.User;
+import com.exammatrix.backend.entity.enums.ClassJoinMode;
 import com.exammatrix.backend.entity.enums.StudentAssignmentStatus;
 import com.exammatrix.backend.entity.enums.UserStatus;
 import com.exammatrix.backend.repository.StudentTeacherAssignmentRepository;
@@ -21,9 +23,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -37,8 +39,8 @@ public class StudentClassServiceImpl implements StudentClassService {
 
     @Override
     public List<UserResponse> getAvailableTeachers() {
-        return userRepository.findAll().stream()
-                .filter(u -> "TEACHER".equalsIgnoreCase(u.getRole().getName()) && u.getStatus() == UserStatus.ACTIVE)
+        currentUserService.getCurrentUser();
+        return userRepository.findByRole_NameIgnoreCaseAndStatusOrderByFullNameAsc("TEACHER", UserStatus.ACTIVE).stream()
                 .map(u -> new UserResponse(
                         u.getId(),
                         u.getUsername(),
@@ -55,96 +57,145 @@ public class StudentClassServiceImpl implements StudentClassService {
     @Override
     public StudentAssignmentResponse getCurrentAssignment() {
         User student = currentUserService.getCurrentUser();
-        return assignmentRepository.findFirstByStudent_IdOrderByRequestedAtDesc(student.getId())
+
+        return assignmentRepository.findFirstByStudent_IdAndStatusOrderByRequestedAtDesc(
+                        student.getId(), StudentAssignmentStatus.APPROVED)
+                .or(() -> assignmentRepository.findFirstByStudent_IdAndStatusOrderByRequestedAtDesc(
+                        student.getId(), StudentAssignmentStatus.PENDING))
+                .or(() -> assignmentRepository.findFirstByStudent_IdOrderByRequestedAtDesc(student.getId()))
                 .map(this::toAssignmentResponse)
                 .orElse(null);
     }
 
     @Override
+    public StudentClassDiscoveryResponse getClassDiscovery() {
+        User student = currentUserService.getCurrentUser();
+        List<StudentTeacherAssignment> allHistory = assignmentRepository
+                .findByStudent_IdOrderByRequestedAtDesc(student.getId());
+
+        StudentAssignmentResponse activeAssignment = allHistory.stream()
+                .filter(a -> a.getStatus() == StudentAssignmentStatus.APPROVED)
+                .findFirst()
+                .map(this::toAssignmentResponse)
+                .orElse(null);
+
+        StudentAssignmentResponse pendingAssignment = allHistory.stream()
+                .filter(a -> a.getStatus() == StudentAssignmentStatus.PENDING)
+                .findFirst()
+                .map(this::toAssignmentResponse)
+                .orElse(null);
+
+        StudentAssignmentResponse latestAssignment = allHistory.stream()
+                .findFirst()
+                .map(this::toAssignmentResponse)
+                .orElse(null);
+
+        List<StudentAssignmentResponse> history = allHistory.stream()
+                .limit(20)
+                .map(this::toAssignmentResponse)
+                .toList();
+
+        List<StudentClassDiscoveryResponse.DiscoverableClassItem> availableClasses = teacherClassRepository
+                .findAllByOrderByNameAsc()
+                .stream()
+                .filter(tc -> tc.getTeacher() != null
+                        && "TEACHER".equalsIgnoreCase(tc.getTeacher().getRole().getName())
+                        && tc.getTeacher().getStatus() == UserStatus.ACTIVE
+                        && tc.isJoinEnabled())
+                .map(tc -> new StudentClassDiscoveryResponse.DiscoverableClassItem(
+                        tc.getId(),
+                        tc.getName(),
+                        tc.getClassCode(),
+                        tc.getTeacher().getId(),
+                        tc.getTeacher().getFullName(),
+                        tc.effectiveJoinMode(),
+                        tc.requiresPassword(),
+                        assignmentRepository.countByTeacherClass_IdAndStatus(tc.getId(), StudentAssignmentStatus.APPROVED)
+                ))
+                .toList();
+
+        return new StudentClassDiscoveryResponse(
+                activeAssignment,
+                pendingAssignment,
+                latestAssignment,
+                history,
+                availableClasses
+        );
+    }
+
+    @Override
     @Transactional
     public StudentAssignmentResponse joinClass(JoinClassRequest request) {
-        User student = currentUserService.getCurrentUser();
+        User student = currentUserService.getCurrentUserForUpdate();
 
-        TeacherClass teacherClass = null;
+        Optional<TeacherClass> selectedClass = Optional.empty();
         if (StringUtils.hasText(request.getClassCode())) {
-            teacherClass = teacherClassRepository.findByClassCode(request.getClassCode().trim().toUpperCase(Locale.ROOT))
-                    .orElse(null);
+            selectedClass = teacherClassRepository.findByClassCode(request.getClassCode().trim().toUpperCase(Locale.ROOT));
+        } else if (request.getTeacherId() != null) {
+            selectedClass = teacherClassRepository.findByTeacher_Id(request.getTeacherId());
         }
-
-        if (teacherClass == null && request.getTeacherId() != null) {
-            teacherClass = teacherClassRepository.findByTeacher_Id(request.getTeacherId())
-                    .orElseGet(() -> {
-                        User teacher = userRepository.findById(request.getTeacherId())
-                                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy giáo viên"));
-                        TeacherClass newClass = TeacherClass.builder()
-                                .teacher(teacher)
-                                .name("Lớp của " + teacher.getFullName())
-                                .classCode("CLASS_" + teacher.getUsername().toUpperCase(Locale.ROOT))
-                                .joinPassword(passwordEncoder.encode("123456"))
-                                .build();
-                        return teacherClassRepository.save(newClass);
-                    });
-        }
-
-        if (teacherClass == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy lớp học hoặc giáo viên tương ứng");
-        }
-
-        if (!passwordEncoder.matches(request.getPassword(), teacherClass.getJoinPassword())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mật khẩu lớp học không chính xác");
-        }
-
+        TeacherClass teacherClass = selectedClass.orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy lớp học hoặc giáo viên tương ứng"));
         User teacher = teacherClass.getTeacher();
+        if ((request.getTeacherId() != null && !request.getTeacherId().equals(teacher.getId()))
+                || !"TEACHER".equalsIgnoreCase(teacher.getRole().getName()) || teacher.getStatus() != UserStatus.ACTIVE) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy lớp học phù hợp");
+        }
         if (teacher.getId().equals(student.getId())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Giáo viên không thể tham gia lớp của chính mình");
         }
 
-        // Check if student has active assignment with another teacher
-        List<StudentAssignmentStatus> activeStatuses = List.of(StudentAssignmentStatus.APPROVED, StudentAssignmentStatus.PENDING);
-        StudentTeacherAssignment existingActive = assignmentRepository
-                .findFirstByStudent_IdAndStatusIn(student.getId(), activeStatuses)
-                .orElse(null);
+        ClassJoinMode mode = teacherClass.effectiveJoinMode();
+        if (mode == ClassJoinMode.CLOSED || !teacherClass.isJoinEnabled()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Lớp học hiện đang đóng nhận yêu cầu tham gia");
+        }
 
-        if (existingActive != null) {
-            if (existingActive.getTeacher().getId().equals(teacher.getId())) {
-                if (existingActive.getStatus() == StudentAssignmentStatus.APPROVED) {
-                    return toAssignmentResponse(existingActive);
-                }
-                existingActive.setStatus(StudentAssignmentStatus.APPROVED);
-                existingActive.setTeacherClass(teacherClass);
-                existingActive.setReviewedAt(LocalDateTime.now());
-                existingActive.setDecisionNote("Tham gia bằng mật khẩu lớp học");
-                return toAssignmentResponse(assignmentRepository.save(existingActive));
-            } else {
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST,
-                        "Bạn hiện đã tham gia lớp của giáo viên " + existingActive.getTeacher().getFullName()
-                );
+        if (mode == ClassJoinMode.REQUEST_WITH_PASSWORD) {
+            String rawPassword = request.getPassword();
+            if (!StringUtils.hasText(rawPassword)
+                    || "123456".equals(rawPassword.trim())
+                    || teacherClass.getJoinPassword() == null
+                    || !passwordEncoder.matches(rawPassword, teacherClass.getJoinPassword())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mật khẩu lớp học không chính xác");
             }
         }
 
-        // Check for any previous revoked/rejected record to avoid duplicate insert violating constraints
-        StudentTeacherAssignment previousAssignment = assignmentRepository
-                .findFirstByStudent_IdOrderByRequestedAtDesc(student.getId())
-                .filter(a -> a.getTeacher().getId().equals(teacher.getId()))
-                .orElse(null);
-
-        if (previousAssignment != null) {
-            previousAssignment.setStatus(StudentAssignmentStatus.APPROVED);
-            previousAssignment.setTeacherClass(teacherClass);
-            previousAssignment.setRequestedAt(LocalDateTime.now());
-            previousAssignment.setReviewedAt(LocalDateTime.now());
-            previousAssignment.setDecisionNote("Tham gia bằng mật khẩu lớp học");
-            return toAssignmentResponse(assignmentRepository.save(previousAssignment));
+        Optional<StudentTeacherAssignment> activeApprovedOpt = assignmentRepository
+                .findFirstByStudent_IdAndStatusOrderByRequestedAtDesc(student.getId(), StudentAssignmentStatus.APPROVED);
+        if (activeApprovedOpt.isPresent()
+                && activeApprovedOpt.get().getTeacher().getId().equals(teacher.getId())) {
+            return toAssignmentResponse(activeApprovedOpt.get());
         }
+
+        Optional<StudentTeacherAssignment> existingPendingOpt = assignmentRepository
+                .findFirstByStudent_IdAndStatusOrderByRequestedAtDesc(student.getId(), StudentAssignmentStatus.PENDING);
+        if (existingPendingOpt.isPresent()) {
+            StudentTeacherAssignment pending = existingPendingOpt.get();
+            if (pending.getTeacher().getId().equals(teacher.getId())) {
+
+                return toAssignmentResponse(pending);
+            }
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Bạn đang có một yêu cầu chờ duyệt tới lớp "
+                            + (pending.getTeacherClass() != null ? pending.getTeacherClass().getName() : pending.getTeacher().getFullName())
+                            + ". Vui lòng đợi giáo viên xử lý trước khi gửi yêu cầu mới."
+            );
+        }
+
+        boolean isTransfer = activeApprovedOpt.isPresent();
+        String note = isTransfer
+                ? "Yêu cầu chuyển lớp (đang giữ quyền lớp cũ cho đến khi được duyệt)"
+                : (mode == ClassJoinMode.REQUEST_WITH_PASSWORD
+                        ? "Gửi yêu cầu tham gia lớp bằng mật khẩu"
+                        : "Gửi yêu cầu tham gia lớp mở");
 
         StudentTeacherAssignment newAssignment = StudentTeacherAssignment.builder()
                 .student(student)
                 .teacher(teacher)
                 .teacherClass(teacherClass)
-                .status(StudentAssignmentStatus.APPROVED)
-                .decisionNote("Tham gia bằng mật khẩu lớp học")
-                .reviewedAt(LocalDateTime.now())
+                .status(StudentAssignmentStatus.PENDING)
+                .decisionNote(note)
                 .build();
 
         return toAssignmentResponse(assignmentRepository.save(newAssignment));

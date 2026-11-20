@@ -14,7 +14,7 @@ Dự án ứng dụng hỗ trợ giáo viên xây dựng ma trận đề thi, si
 
 ## 2. Hướng dẫn Chạy Database Migration
 
-Hệ thống sử dụng `spring.jpa.hibernate.ddl-auto=validate`, vì vậy trước khi khởi động backend lần đầu hoặc khi cập nhật module sinh viên, cần thực thi các script SQL sau vào database PostgreSQL theo thứ tự:
+Schema thực tế được ghi trong `database/`. Trước khi đưa bản mới lên PostgreSQL đang có dữ liệu, cập nhật schema theo phiên bản và chạy với `DB_DDL_AUTO=validate` sau khi xác nhận cài đặt. Chế độ phát triển mặc định là `update`.
 
 1. `database/V2__student_exam_flow.sql`:
    - Bổ sung vai trò `STUDENT`.
@@ -37,7 +37,7 @@ psql -U <db_user> -d <db_name> -f database/V3__student_exam_access_and_import.sq
 
 ## 3. Triển khai với Docker & Docker Compose (Khuyến nghị)
 
-Toàn bộ hệ thống (PostgreSQL, Backend Spring Boot, Frontend Nginx) đã được container hóa hoàn chỉnh. Cơ chế tự động chạy các migration script (`V1` -> `V2` -> `V3` -> `V4`) thông qua volume `/docker-entrypoint-initdb.d/` của PostgreSQL container khi khởi động lần đầu.
+Docker Compose khởi tạo PostgreSQL bằng `V1`, `V2`, `V3`, `V5`, `V6` trên volume mới. Dùng [hướng dẫn bật Google và nâng cấp backend](docs/backend-google-sign-in.md) cho volume đã có dữ liệu.
 
 ### 3.1. Khởi chạy toàn bộ hệ thống
 
@@ -48,7 +48,7 @@ docker compose up -d --build
 ```
 
 Lệnh này sẽ tự động:
-1. Khởi tạo container PostgreSQL 16 Alpine, tạo cơ sở dữ liệu `exam_matrix` và tự động nạp các script schema (`V1`, `V2`, `V3`) cùng dữ liệu mẫu ban đầu (`V4__seed_data.sql`).
+1. Khởi tạo container PostgreSQL 16 Alpine, tạo cơ sở dữ liệu `exam_matrix` và nạp schema cùng các vai trò.
 2. Build backend đa tầng (multi-stage build) trên nền Java 21 Temurin Alpine, chạy ứng dụng dưới quyền non-root user `appuser` tại cổng 8080.
 3. Build frontend với Vite & pnpm, đóng gói vào Nginx Alpine phục vụ tĩnh kèm cấu hình reverse proxy chuyển tiếp các API `/auth/`, `/student/`, `/teacher/`, `/dashboard/`, `/questions/`, `/matrices/`, `/exam-papers/` về backend tại cổng 3000.
 
@@ -57,7 +57,7 @@ Lệnh này sẽ tự động:
 - **Giao diện người dùng (Frontend Web)**: [http://localhost:3000](http://localhost:3000)
 - **Backend API trực tiếp**: [http://localhost:8080](http://localhost:8080)
 
-**Tài khoản mẫu được nạp sẵn (`V4__seed_data.sql`):**
+**Tài khoản mẫu cho môi trường demo.** Chỉ dùng `docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d --build` với một DB mới dành riêng cho demo. Bản chạy thông thường cần cấu hình quản trị viên ban đầu theo hướng dẫn ở trên.
 - **Quản trị viên (Admin)**: `admin` / `admin123`
 - **Giáo viên (Teacher)**: `teacher` / `teacher123` (Đã có sẵn lớp học mẫu mã `TOAN12A` - mật khẩu lớp: `123`)
 - **Sinh viên (Student)**: `student` / `student123`

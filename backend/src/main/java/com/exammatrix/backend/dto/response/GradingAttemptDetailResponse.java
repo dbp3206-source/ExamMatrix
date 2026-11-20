@@ -25,5 +25,6 @@ public class GradingAttemptDetailResponse {
     private ExamType examType;
     private BigDecimal score;
     private BigDecimal maxScore;
+    private BigDecimal scoreOnTen;
     private List<GradingQuestionAnswerResponse> answers;
 }

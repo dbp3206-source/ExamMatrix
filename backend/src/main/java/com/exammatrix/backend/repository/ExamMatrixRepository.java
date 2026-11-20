@@ -58,7 +58,6 @@ public interface ExamMatrixRepository extends JpaRepository<ExamMatrix, UUID> {
             """)
     int updateNullExamType(@Param("examType") ExamType examType);
 
-
     @Override
     @EntityGraph(attributePaths = {
             "teacher",
@@ -79,6 +78,8 @@ public interface ExamMatrixRepository extends JpaRepository<ExamMatrix, UUID> {
     );
 
     long countByTeacher_Id(UUID teacherId);
+
+    boolean existsBySubject_Id(Integer subjectId);
 
     List<ExamMatrix> findTop5ByOrderByUpdatedAtDesc();
 

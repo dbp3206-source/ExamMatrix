@@ -4,6 +4,8 @@ const unwrap = (request) => request.then(({ data }) => data)
 
 export const realApi = {
   login: (body) => unwrap(http.post('/auth/login', body)),
+  googleStudentChallenge: () => unwrap(http.post('/auth/google/student/challenge', null, { withCredentials: true })),
+  googleStudentLogin: (credential) => unwrap(http.post('/auth/google/student', { credential }, { withCredentials: true })),
   me: () => unwrap(http.get('/auth/me')),
   logout: () => unwrap(http.post('/auth/logout')),
   updateProfile: (body) => unwrap(http.patch('/auth/profile', body)),
@@ -36,12 +38,16 @@ export const realApi = {
   updateMatrix: (id, body) => unwrap(http.patch(`/exam-matrices/${id}`, body)),
   deleteMatrix: (id) => unwrap(http.delete(`/exam-matrices/${id}`)),
   generatePapers: (id, body) => unwrap(http.post(`/exam-matrices/${id}/generate`, body)),
+  getGenerationAdvice: (id, body) => unwrap(http.post(`/exam-matrices/${id}/generation-advice`, body)),
   getPapers: (params) => unwrap(http.get('/exam-papers', { params })),
+  getPaperSummaries: (params) => unwrap(http.get('/exam-papers/summary', { params })),
   getPaper: (id) => unwrap(http.get(`/exam-papers/${id}`)),
   deletePaper: (id) => unwrap(http.delete(`/exam-papers/${id}`)),
   getDashboard: () => unwrap(http.get('/dashboard/summary')),
+  getDashboardAnalytics: (params) => unwrap(http.get('/dashboard/analytics', { params })),
   registerStudent: (body) => unwrap(http.post('/auth/register/student', body)),
   getTeachers: () => unwrap(http.get('/student/teachers')),
+  getStudentClassDiscovery: () => unwrap(http.get('/student/classes/discover')),
   createTeacherRequest: (body) => unwrap(http.post('/student/teacher-requests', body)),
   getCurrentTeacherRequest: () =>
     http.get('/student/teacher-requests/current')
@@ -51,6 +57,11 @@ export const realApi = {
         throw err
       }),
   getStudentExams: (params) => unwrap(http.get('/student/exams', { params })),
+  getStudentExamSubjects: () => unwrap(http.get('/student/exams/subjects')),
+  getAdminResultUsers: (params) => unwrap(http.get('/admin/results/users', { params })),
+  getAdminTeacherEssays: (teacherId, params) => unwrap(http.get(`/admin/results/teacher/${teacherId}/essays`, { params })),
+  getAdminTeacherObjectives: (teacherId, params) => unwrap(http.get(`/admin/results/teacher/${teacherId}/objectives`, { params })),
+  getAdminStudentResults: (studentId, params) => unwrap(http.get(`/admin/results/student/${studentId}/attempts`, { params })),
   getStudentExam: (paperId) => unwrap(http.get(`/student/exams/${paperId}`)),
   startExamAttempt: (paperId) => unwrap(http.post(`/student/exams/${paperId}/attempts`)),
   saveAttemptAnswer: (attemptId, body) => unwrap(http.patch(`/student/attempts/${attemptId}/answers`, body)),

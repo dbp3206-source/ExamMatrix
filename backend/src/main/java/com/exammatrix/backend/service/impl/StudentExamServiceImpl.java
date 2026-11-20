@@ -6,6 +6,7 @@ import com.exammatrix.backend.entity.*;
 import com.exammatrix.backend.entity.enums.*;
 import com.exammatrix.backend.repository.*;
 import com.exammatrix.backend.security.CurrentUserService;
+import com.exammatrix.backend.service.ScoreScaleService;
 import com.exammatrix.backend.service.StudentExamService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -32,11 +33,34 @@ public class StudentExamServiceImpl implements StudentExamService {
     private final QuestionRepository questionRepository;
     private final AnswerRepository answerRepository;
     private final CurrentUserService currentUserService;
+    private final ScoreScaleService scoreScaleService;
 
     @Override
     public PageResponse<StudentExamSummaryResponse> getAccessibleExams(Pageable pageable) {
+        return getAccessibleExams(null, null, "publishedAt", "desc", pageable);
+    }
+
+    @Override
+    public PageResponse<StudentExamSummaryResponse> getAccessibleExams(
+            Integer subjectId,
+            String search,
+            String sortBy,
+            String sortDir,
+            Pageable pageable
+    ) {
         User student = currentUserService.getCurrentUser();
-        Page<ExamPaper> paperPage = examPaperRepository.findAccessiblePapersForStudent(student.getId(), pageable);
+        String normalizedSearch = search == null ? "" : search.trim();
+        String normalizedField = switch (sortBy == null ? "publishedAt" : sortBy.trim()) {
+            case "title" -> "title";
+            case "examCode" -> "examCode";
+            case "duration" -> "duration";
+            default -> "publishedAt";
+        };
+        String normalizedDir = "asc".equalsIgnoreCase(sortDir) ? "asc" : "desc";
+        String sortKey = normalizedField + "_" + normalizedDir;
+
+        Page<ExamPaper> paperPage = examPaperRepository.searchAccessiblePapersForStudent(
+                student.getId(), subjectId, normalizedSearch, sortKey, pageable);
 
         List<StudentExamSummaryResponse> responses = paperPage.getContent().stream()
                 .map(paper -> {
@@ -45,6 +69,10 @@ public class StudentExamServiceImpl implements StudentExamService {
 
                     AttemptStatus attemptStatus = attemptOpt.map(StudentExamAttempt::getStatus).orElse(null);
                     UUID attemptId = attemptOpt.map(StudentExamAttempt::getId).orElse(null);
+                    BigDecimal scoreOnTen = attemptOpt
+                            .filter(a -> a.getStatus() == AttemptStatus.COMPLETED)
+                            .map(a -> scoreScaleService.normalizeToTen(a.getScore(), a.getMaxScore(), a.getScoreOnTen()))
+                            .orElse(null);
 
                     ExamMatrix matrix = paper.getExamMatrix();
                     return StudentExamSummaryResponse.builder()
@@ -52,6 +80,7 @@ public class StudentExamServiceImpl implements StudentExamService {
                             .examCode(paper.getExamCode())
                             .title(matrix.getTitle())
                             .teacherName(matrix.getTeacher().getFullName())
+                            .subjectId(matrix.getSubject().getId())
                             .subjectName(matrix.getSubject().getName())
                             .examType(matrix.getExamType())
                             .duration(matrix.getDuration())
@@ -59,6 +88,8 @@ public class StudentExamServiceImpl implements StudentExamService {
                             .accessType(paper.getAccessType())
                             .attemptStatus(attemptStatus)
                             .attemptId(attemptId)
+                            .scoreOnTen(scoreOnTen)
+                            .publishedAt(paper.getPublishedAt() != null ? paper.getPublishedAt() : paper.getCreatedAt())
                             .createdAt(paper.getCreatedAt())
                             .build();
                 })
@@ -74,6 +105,20 @@ public class StudentExamServiceImpl implements StudentExamService {
     }
 
     @Override
+    public List<StudentSubjectExamCountResponse> getAccessibleExamSubjectCounts() {
+        User student = currentUserService.getCurrentUser();
+        return examPaperRepository.countAccessiblePapersBySubjectForStudent(student.getId())
+                .stream()
+                .map(row -> new StudentSubjectExamCountResponse(
+                        ((Number) row[0]).intValue(),
+                        (String) row[1],
+                        (String) row[2],
+                        ((Number) row[3]).longValue()
+                ))
+                .toList();
+    }
+
+    @Override
     public StudentExamDetailResponse getExamDetail(UUID paperId) {
         User student = currentUserService.getCurrentUser();
         ExamPaper paper = findExamPaperById(paperId);
@@ -85,7 +130,9 @@ public class StudentExamServiceImpl implements StudentExamService {
                 .sorted(Comparator.comparing(PaperQuestion::getQuestionOrder))
                 .map(pq -> {
                     Question q = pq.getQuestion();
-                    List<StudentAnswerChoiceResponse> answerChoices = q.getAnswers().stream()
+                    List<StudentAnswerChoiceResponse> answerChoices = PaperAnswerOrderHelper
+                            .orderAnswersForPaper(paper.getId(), q)
+                            .stream()
                             .map(a -> new StudentAnswerChoiceResponse(a.getId(), a.getContent()))
                             .toList();
 
@@ -116,10 +163,11 @@ public class StudentExamServiceImpl implements StudentExamService {
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = ResponseStatusException.class)
     public StartAttemptResponse startAttempt(UUID paperId) {
-        User student = currentUserService.getCurrentUser();
-        ExamPaper paper = findExamPaperById(paperId);
+        User student = currentUserService.getCurrentUserForUpdate();
+        ExamPaper paper = examPaperRepository.findByIdForAttemptStart(paperId).orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đề thi"));
 
         verifyStudentAccess(student, paper);
 
@@ -127,7 +175,7 @@ public class StudentExamServiceImpl implements StudentExamService {
         int durationMinutes = matrix.getDuration();
 
         Optional<StudentExamAttempt> existingOpt = attemptRepository
-                .findByStudent_IdAndExamPaper_Id(student.getId(), paper.getId());
+                .findForStart(student.getId(), paper.getId());
 
         if (existingOpt.isPresent()) {
             StudentExamAttempt existing = existingOpt.get();
@@ -145,6 +193,8 @@ public class StudentExamServiceImpl implements StudentExamService {
                         .remainingSeconds(remaining)
                         .status(existing.getStatus())
                         .build();
+            } else if (existing.getStatus() == AttemptStatus.CANCELLED) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Lượt làm bài đã bị hủy");
             } else {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Bạn đã hoàn thành bài thi này và không thể làm lại");
             }
@@ -154,10 +204,23 @@ public class StudentExamServiceImpl implements StudentExamService {
                 .map(PaperQuestion::getPoints)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
+        TeacherClass snapshotClass = null;
+        if (paper.getAccessType() == ExamAccessType.PRIVATE) {
+            snapshotClass = assignmentRepository
+                    .findFirstByStudent_IdAndTeacher_IdAndStatusOrderByReviewedAtDesc(
+                            student.getId(),
+                            matrix.getTeacher().getId(),
+                            StudentAssignmentStatus.APPROVED
+                    )
+                    .map(StudentTeacherAssignment::getTeacherClass)
+                    .orElse(null);
+        }
+
         StudentExamAttempt attempt = StudentExamAttempt.builder()
                 .examPaper(paper)
                 .student(student)
                 .teacher(matrix.getTeacher())
+                .teacherClass(snapshotClass)
                 .status(AttemptStatus.IN_PROGRESS)
                 .startedAt(LocalDateTime.now())
                 .maxScore(maxScore.compareTo(BigDecimal.ZERO) > 0 ? maxScore : BigDecimal.valueOf(10))
@@ -175,29 +238,38 @@ public class StudentExamServiceImpl implements StudentExamService {
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = ResponseStatusException.class)
     public void saveAnswer(UUID attemptId, SaveAttemptAnswerRequest request) {
         User student = currentUserService.getCurrentUser();
-        StudentExamAttempt attempt = attemptRepository.findById(attemptId)
+        StudentExamAttempt attempt = attemptRepository.findByIdForUpdate(attemptId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy lượt làm bài"));
 
         if (!attempt.getStudent().getId().equals(student.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền chỉnh sửa bài làm của người khác");
         }
 
+        if (attempt.getStatus() == AttemptStatus.CANCELLED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Lượt làm bài đã bị hủy, không thể sửa câu trả lời");
+        }
         if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bài thi đã nộp, không thể sửa câu trả lời");
         }
 
         int durationMinutes = attempt.getExamPaper().getExamMatrix().getDuration();
         long elapsedSeconds = Duration.between(attempt.getStartedAt(), LocalDateTime.now()).getSeconds();
-        if (elapsedSeconds > (durationMinutes * 60L + 30L)) {
+        if (elapsedSeconds >= (durationMinutes * 60L)) {
             submitInternal(attempt);
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Đã hết thời gian làm bài thi");
         }
 
         Question question = questionRepository.findById(request.getQuestionId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy câu hỏi"));
+
+        boolean belongsToPaper = attempt.getExamPaper().getPaperQuestions().stream()
+                .anyMatch(pq -> pq.getQuestion().getId().equals(question.getId()));
+        if (!belongsToPaper) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Câu hỏi không thuộc đề thi này");
+        }
 
         StudentAttemptAnswer answer = attemptAnswerRepository
                 .findByAttempt_IdAndQuestion_Id(attempt.getId(), question.getId())
@@ -207,16 +279,40 @@ public class StudentExamServiceImpl implements StudentExamService {
                         .build()
                 );
 
+        List<UUID> selectedAnswerIds = request.getSelectedAnswerIds();
         if (question.getType() == QuestionType.ESSAY) {
+            if (selectedAnswerIds != null && !selectedAnswerIds.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Câu tự luận không có đáp án lựa chọn");
+            }
             answer.setEssayAnswer(request.getEssayAnswer());
             answer.getChoices().clear();
         } else {
+            if (request.getEssayAnswer() != null && !request.getEssayAnswer().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Câu trắc nghiệm chỉ nhận đáp án lựa chọn");
+            }
+            List<Answer> selected = List.of();
+            if (selectedAnswerIds != null && !selectedAnswerIds.isEmpty()) {
+                Set<UUID> uniqueIds = new LinkedHashSet<>(selectedAnswerIds);
+                if (uniqueIds.contains(null)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "ID đáp án không được để trống");
+                }
+                if ((question.getType() == QuestionType.SINGLE_CHOICE || question.getType() == QuestionType.TRUE_FALSE)
+                        && uniqueIds.size() > 1) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Câu hỏi này chỉ được chọn tối đa 1 đáp án");
+                }
+                selected = answerRepository.findAllById(uniqueIds);
+                if (selected.size() != uniqueIds.size()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Có đáp án không tồn tại");
+                }
+                boolean allBelongToQuestion = selected.stream()
+                        .allMatch(a -> a.getQuestion() != null && a.getQuestion().getId().equals(question.getId()));
+                if (!allBelongToQuestion) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Đáp án không thuộc câu hỏi này");
+                }
+            }
             answer.setEssayAnswer(null);
             answer.getChoices().clear();
-            if (request.getSelectedAnswerIds() != null && !request.getSelectedAnswerIds().isEmpty()) {
-                List<Answer> selected = answerRepository.findAllById(request.getSelectedAnswerIds());
-                answer.getChoices().addAll(selected);
-            }
+            answer.getChoices().addAll(selected);
         }
 
         attemptAnswerRepository.save(answer);
@@ -226,13 +322,16 @@ public class StudentExamServiceImpl implements StudentExamService {
     @Transactional
     public StudentAttemptResultResponse submitAttempt(UUID attemptId) {
         User student = currentUserService.getCurrentUser();
-        StudentExamAttempt attempt = attemptRepository.findById(attemptId)
+        StudentExamAttempt attempt = attemptRepository.findByIdForUpdate(attemptId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy lượt làm bài"));
 
         if (!attempt.getStudent().getId().equals(student.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền nộp bài thi của người khác");
         }
 
+        if (attempt.getStatus() == AttemptStatus.CANCELLED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Lượt làm bài đã bị hủy");
+        }
         if (attempt.getStatus() != AttemptStatus.IN_PROGRESS) {
             return toResultResponse(attempt);
         }
@@ -273,6 +372,8 @@ public class StudentExamServiceImpl implements StudentExamService {
 
         boolean hasEssay = false;
         BigDecimal totalScore = BigDecimal.ZERO;
+        int objectiveCount = 0;
+        int correctCount = 0;
 
         for (PaperQuestion pq : paper.getPaperQuestions()) {
             Question q = pq.getQuestion();
@@ -289,6 +390,7 @@ public class StudentExamServiceImpl implements StudentExamService {
                 answer.setIsCorrect(null);
                 answer.setAwardedScore(null);
             } else {
+                objectiveCount++;
                 Set<UUID> correctIds = q.getAnswers().stream()
                         .filter(a -> Boolean.TRUE.equals(a.getIsCorrect()))
                         .map(Answer::getId)
@@ -299,6 +401,9 @@ public class StudentExamServiceImpl implements StudentExamService {
                         .collect(Collectors.toSet());
 
                 boolean correct = !correctIds.isEmpty() && correctIds.equals(selectedIds);
+                if (correct) {
+                    correctCount++;
+                }
                 answer.setIsCorrect(correct);
                 BigDecimal scoreForQuestion = correct ? pq.getPoints() : BigDecimal.ZERO;
                 answer.setAwardedScore(scoreForQuestion);
@@ -311,13 +416,30 @@ public class StudentExamServiceImpl implements StudentExamService {
         if (hasEssay) {
             attempt.setStatus(AttemptStatus.WAITING_GRADING);
             attempt.setScore(null);
+            attempt.setScoreOnTen(null);
         } else {
+            BigDecimal scoreOnTen = scoreScaleService.calculateObjectiveScoreOnTen(correctCount, objectiveCount);
             attempt.setStatus(AttemptStatus.COMPLETED);
-            attempt.setScore(totalScore);
+            attempt.setScoreOnTen(scoreOnTen);
+            if (attempt.getMaxScore() != null && attempt.getMaxScore().compareTo(ScoreScaleService.SCALE_MAX) == 0) {
+                attempt.setScore(scoreOnTen);
+            } else {
+                attempt.setScore(totalScore);
+            }
             attempt.setGradedAt(LocalDateTime.now());
         }
 
         attemptRepository.save(attempt);
+    }
+
+    @Transactional
+    public void finalizeExpiredAttempt(UUID attemptId, LocalDateTime now) {
+        attemptRepository.findByIdForUpdate(attemptId).ifPresent(attempt -> {
+            if (attempt.getStatus() == AttemptStatus.IN_PROGRESS && !attempt.getStartedAt()
+                    .plusMinutes(attempt.getExamPaper().getExamMatrix().getDuration()).isAfter(now)) {
+                submitInternal(attempt);
+            }
+        });
     }
 
     private void verifyStudentAccess(User student, ExamPaper paper) {
@@ -385,6 +507,13 @@ public class StudentExamServiceImpl implements StudentExamService {
                 })
                 .toList();
 
+        int correctCount = (int) answerList.stream()
+                .filter(a -> Boolean.TRUE.equals(a.getIsCorrect()))
+                .count();
+        BigDecimal scoreOnTen = attempt.getStatus() == AttemptStatus.COMPLETED
+                ? scoreScaleService.normalizeToTen(attempt.getScore(), attempt.getMaxScore(), attempt.getScoreOnTen())
+                : null;
+
         return StudentAttemptResultResponse.builder()
                 .attemptId(attempt.getId())
                 .paperId(paper.getId())
@@ -395,6 +524,9 @@ public class StudentExamServiceImpl implements StudentExamService {
                 .status(attempt.getStatus())
                 .score(attempt.getStatus() == AttemptStatus.COMPLETED ? attempt.getScore() : null)
                 .maxScore(attempt.getMaxScore())
+                .scoreOnTen(scoreOnTen)
+                .correctCount(attempt.getStatus() == AttemptStatus.COMPLETED ? correctCount : null)
+                .totalQuestions(paper.getPaperQuestions().size())
                 .startedAt(attempt.getStartedAt())
                 .submittedAt(attempt.getSubmittedAt())
                 .gradedAt(attempt.getGradedAt())

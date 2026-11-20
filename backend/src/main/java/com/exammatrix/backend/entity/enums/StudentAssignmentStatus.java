@@ -4,5 +4,6 @@ public enum StudentAssignmentStatus {
     PENDING,
     APPROVED,
     REJECTED,
-    REVOKED
+    REVOKED,
+    TRANSFERRED
 }

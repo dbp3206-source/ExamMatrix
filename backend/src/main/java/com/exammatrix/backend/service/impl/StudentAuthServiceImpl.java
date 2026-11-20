@@ -13,11 +13,13 @@ import com.exammatrix.backend.service.StudentAuthService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Locale;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -53,7 +55,50 @@ public class StudentAuthServiceImpl implements StudentAuthService {
                 .status(UserStatus.ACTIVE)
                 .build();
 
-        User savedUser = userRepository.save(user);
+        return createSession(userRepository.save(user));
+    }
+
+    @Override
+    @Transactional
+    public AuthResponse loginWithGoogle(Jwt identity) {
+        User existing = userRepository.findByGoogleSubject(identity.getSubject()).orElse(null);
+        if (existing != null) {
+            if (!"STUDENT".equalsIgnoreCase(existing.getRole().getName())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Đăng nhập Google chỉ dành cho học sinh");
+            }
+            if (existing.getStatus() != UserStatus.ACTIVE) {
+                throw new ResponseStatusException(HttpStatus.LOCKED, "Tài khoản đã bị khóa");
+            }
+            return createSession(existing);
+        }
+
+        String email = identity.getClaimAsString("email");
+        if (email == null || email.isBlank() || email.trim().length() > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email tài khoản Google không hợp lệ");
+        }
+        email = email.trim().toLowerCase(Locale.ROOT);
+        if (userRepository.existsByEmailIgnoreCase(email)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Email đã có tài khoản Exam Matrix. Vui lòng đăng nhập bằng tài khoản hiện có");
+        }
+        Role role = roleRepository.findByNameIgnoreCase("STUDENT").orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa cấu hình vai trò học sinh"));
+        String name = identity.getClaimAsString("name");
+        String fullName = name == null || name.isBlank() ? email : name.strip();
+        int nameLength = Math.min(100, fullName.codePointCount(0, fullName.length()));
+        User student = User.builder()
+                .username("google_" + UUID.randomUUID().toString().replace("-", ""))
+                .email(email)
+                .fullName(fullName.substring(0, fullName.offsetByCodePoints(0, nameLength)))
+                .password(passwordEncoder.encode(UUID.randomUUID().toString()))
+                .googleSubject(identity.getSubject())
+                .role(role)
+                .status(UserStatus.ACTIVE)
+                .build();
+        return createSession(userRepository.saveAndFlush(student));
+    }
+
+    private AuthResponse createSession(User savedUser) {
         String token = jwtService.generateToken(savedUser);
 
         UserResponse userResponse = new UserResponse(

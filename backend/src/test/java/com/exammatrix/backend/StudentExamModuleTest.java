@@ -17,6 +17,7 @@ import com.exammatrix.backend.security.JwtService;
 import com.exammatrix.backend.service.QuestionImportService;
 import com.exammatrix.backend.service.StudentClassService;
 import com.exammatrix.backend.service.StudentExamService;
+import com.exammatrix.backend.service.TeacherClassService;
 import com.exammatrix.backend.service.TeacherGradingService;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
@@ -84,6 +85,9 @@ class StudentExamModuleTest {
 
     @Autowired
     private StudentClassService studentClassService;
+
+    @Autowired
+    private TeacherClassService teacherClassService;
 
     @Autowired
     private StudentExamService studentExamService;
@@ -294,7 +298,6 @@ class StudentExamModuleTest {
         assertEquals("PUB-01", detail.getExamCode());
         assertEquals(1, detail.getQuestions().size());
 
-        // Ensure correct answer flag is hidden from student
         StudentQuestionResponse qResp = detail.getQuestions().get(0);
         assertEquals("What is 2 + 2?", qResp.getContent());
         for (StudentAnswerChoiceResponse choice : qResp.getAnswers()) {
@@ -325,7 +328,7 @@ class StudentExamModuleTest {
     }
 
     @Test
-    @DisplayName("5. Joining class with valid password succeeds and approves student")
+    @DisplayName("5. Joining class with valid password creates PENDING request; teacher approval unlocks private exam")
     void testJoinClassSuccess() {
         authenticateUser(studentUser);
         JoinClassRequest req = JoinClassRequest.builder()
@@ -334,10 +337,23 @@ class StudentExamModuleTest {
                 .build();
         StudentAssignmentResponse resp = studentClassService.joinClass(req);
         assertNotNull(resp);
-        assertEquals(StudentAssignmentStatus.APPROVED, resp.getStatus());
+        assertEquals(StudentAssignmentStatus.PENDING, resp.getStatus());
         assertEquals("CLS12A1", resp.getClassCode());
 
-        // Private exam paper is now accessible
+        ResponseStatusException forbidden = assertThrows(ResponseStatusException.class, () ->
+                studentExamService.getExamDetail(privateObjectivePaper.getId()));
+        assertEquals(403, forbidden.getStatusCode().value());
+
+        authenticateUser(teacherUser);
+        StudentAssignmentResponse approved = teacherClassService.reviewStudentAssignment(
+                resp.getId(),
+                com.exammatrix.backend.dto.request.ReviewStudentAssignmentRequest.builder()
+                        .status(StudentAssignmentStatus.APPROVED)
+                        .build()
+        );
+        assertEquals(StudentAssignmentStatus.APPROVED, approved.getStatus());
+
+        authenticateUser(studentUser);
         StudentExamDetailResponse detail = studentExamService.getExamDetail(privateObjectivePaper.getId());
         assertNotNull(detail);
         assertEquals("PRV-01", detail.getExamCode());
@@ -346,7 +362,7 @@ class StudentExamModuleTest {
     @Test
     @DisplayName("6. Student cannot access PRIVATE exam of other teacher")
     void testCannotAccessOtherTeacherPrivateExam() {
-        // Create paper for other teacher
+
         ExamMatrix otherMatrix = examMatrixRepository.save(ExamMatrix.builder()
                 .subject(publicObjectivePaper.getExamMatrix().getSubject())
                 .teacher(otherTeacherUser)
@@ -363,14 +379,20 @@ class StudentExamModuleTest {
                 .isPublished(true)
                 .build());
 
-        // Student joins teacher1's class
         authenticateUser(studentUser);
-        studentClassService.joinClass(JoinClassRequest.builder()
+        StudentAssignmentResponse reqResp = studentClassService.joinClass(JoinClassRequest.builder()
                 .classCode("CLS12A1")
                 .password("secret123")
                 .build());
+        authenticateUser(teacherUser);
+        teacherClassService.reviewStudentAssignment(
+                reqResp.getId(),
+                com.exammatrix.backend.dto.request.ReviewStudentAssignmentRequest.builder()
+                        .status(StudentAssignmentStatus.APPROVED)
+                        .build()
+        );
+        authenticateUser(studentUser);
 
-        // Accessing teacher2's private paper must fail with 403
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
                 studentExamService.getExamDetail(otherPrivatePaper.getId()));
         assertEquals(403, ex.getStatusCode().value());
@@ -389,24 +411,20 @@ class StudentExamModuleTest {
 
         UUID attemptId = startResp.getAttemptId();
 
-        // Second start call returns the same attempt
         StartAttemptResponse resumeResp = studentExamService.startAttempt(publicObjectivePaper.getId());
         assertEquals(attemptId, resumeResp.getAttemptId());
 
-        // Save correct answer
         studentExamService.saveAnswer(attemptId, SaveAttemptAnswerRequest.builder()
                 .questionId(singleChoiceQ.getId())
                 .selectedAnswerIds(List.of(singleChoiceCorrectAns.getId()))
                 .build());
 
-        // Submit attempt
         StudentAttemptResultResponse result = studentExamService.submitAttempt(attemptId);
         assertNotNull(result);
         assertEquals(AttemptStatus.COMPLETED, result.getStatus());
         assertNotNull(result.getScore());
         assertEquals(0, new BigDecimal("10.00").compareTo(result.getScore()));
 
-        // Cannot save answer after submit
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
                 studentExamService.saveAnswer(attemptId, SaveAttemptAnswerRequest.builder()
                         .questionId(singleChoiceQ.getId())
@@ -419,10 +437,18 @@ class StudentExamModuleTest {
     @DisplayName("8. Essay exam submission transitions to WAITING_GRADING and teacher grades")
     void testEssayExamWorkflowAndGrading() {
         authenticateUser(studentUser);
-        studentClassService.joinClass(JoinClassRequest.builder()
+        StudentAssignmentResponse reqResp = studentClassService.joinClass(JoinClassRequest.builder()
                 .classCode("CLS12A1")
                 .password("secret123")
                 .build());
+        authenticateUser(teacherUser);
+        teacherClassService.reviewStudentAssignment(
+                reqResp.getId(),
+                com.exammatrix.backend.dto.request.ReviewStudentAssignmentRequest.builder()
+                        .status(StudentAssignmentStatus.APPROVED)
+                        .build()
+        );
+        authenticateUser(studentUser);
 
         StartAttemptResponse startResp = studentExamService.startAttempt(privateEssayPaper.getId());
         UUID attemptId = startResp.getAttemptId();
@@ -436,7 +462,6 @@ class StudentExamModuleTest {
         assertEquals(AttemptStatus.WAITING_GRADING, submitResult.getStatus());
         assertNull(submitResult.getScore());
 
-        // Teacher1 grades the essay
         authenticateUser(teacherUser);
         GradingAttemptDetailResponse gradingView = teacherGradingService.getGradingAttempt(attemptId);
         assertNotNull(gradingView);
@@ -446,7 +471,6 @@ class StudentExamModuleTest {
 
         UUID attemptAnswerId = gradingView.getAnswers().get(0).getAttemptAnswerId();
 
-        // Other teacher cannot grade
         authenticateUser(otherTeacherUser);
         assertThrows(ResponseStatusException.class, () ->
                 teacherGradingService.gradeAnswer(attemptId, attemptAnswerId,
@@ -455,7 +479,6 @@ class StudentExamModuleTest {
                                 .feedback("Very clear")
                                 .build()));
 
-        // Owner teacher grades and completes
         authenticateUser(teacherUser);
         teacherGradingService.gradeAnswer(attemptId, attemptAnswerId,
                 com.exammatrix.backend.dto.request.GradeAnswerRequest.builder()
