@@ -51,7 +51,20 @@ const fmtTen = (value) => {
   return Number.isInteger(n) ? `${n}/10` : `${n.toFixed(2).replace(/\.?0+$/, '')}/10`
 }
 
-const PIE_COLORS = ['#4F46E5', '#0D9488', '#D97706', '#2563EB', '#7C3AED', '#059669', '#DC2626', '#475569']
+const PIE_COLORS = [
+  '#2563EB',
+  '#F97316',
+  '#10B981',
+  '#E11D48',
+  '#8B5CF6',
+  '#EAB308',
+  '#06B6D4',
+  '#EC4899',
+  '#84CC16',
+  '#92400E',
+  '#0F766E',
+  '#475569',
+]
 const DIFFICULTY_META = {
   EASY: { label: 'Dễ', color: '#0D9488' },
   MEDIUM: { label: 'Trung bình', color: '#D97706' },
