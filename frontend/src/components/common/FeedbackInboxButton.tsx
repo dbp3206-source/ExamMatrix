@@ -183,7 +183,7 @@ export default function FeedbackInboxButton({ role }: { role: 'ADMIN' | 'TEACHER
                           type="button"
                           size="sm"
                           variant="outline"
-                          disabled={markReadMutation.isPending}
+                          disabled={markReadMutation.isPending && markReadMutation.variables === item.id}
                           onClick={() => markReadMutation.mutate(item.id)}
                         >
                           <Check className="h-3.5 w-3.5" />
@@ -201,8 +201,8 @@ export default function FeedbackInboxButton({ role }: { role: 'ADMIN' | 'TEACHER
 
                     <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs text-slate-500">
                       <span>Lớp học:</span>
-                      {(item.recipientLabels || []).map((label) => (
-                        <span key={label} className="rounded-md bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
+                      {(item.recipientLabels || []).map((label, index) => (
+                        <span key={`${item.id}-${index}`} className="rounded-md bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
                           {label}
                         </span>
                       ))}

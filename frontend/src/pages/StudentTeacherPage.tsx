@@ -118,8 +118,8 @@ export default function StudentTeacherPage() {
   const availableClasses = data?.availableClasses || []
   const history = data?.history || []
 
-  const approvedClassCodes = new Set(approvedClasses.map((a) => a.classCode))
-  const pendingClassCodes = new Set(pendingRequests.map((a) => a.classCode))
+  const approvedClassCodes = new Set(approvedClasses.map((a) => a.classCode).filter(Boolean))
+  const pendingClassCodes = new Set(pendingRequests.map((a) => a.classCode).filter(Boolean))
 
   const openJoinModal = (cls: DiscoverableClassItem) => {
     setFormError('')

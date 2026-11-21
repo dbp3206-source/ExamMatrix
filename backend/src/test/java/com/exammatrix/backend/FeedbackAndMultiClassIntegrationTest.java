@@ -7,19 +7,26 @@ import com.exammatrix.backend.dto.response.*;
 import com.exammatrix.backend.entity.*;
 import com.exammatrix.backend.entity.enums.*;
 import com.exammatrix.backend.repository.*;
+import com.exammatrix.backend.security.JwtService;
 import com.exammatrix.backend.service.*;
+import jakarta.servlet.Filter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
@@ -27,6 +34,11 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
 class FeedbackAndMultiClassIntegrationTest {
@@ -55,7 +67,11 @@ class FeedbackAndMultiClassIntegrationTest {
     @Autowired private UserVisitSessionRepository visitSessionRepository;
     @Autowired private QuestionImportRequestRepository importRequestRepository;
     @Autowired private PasswordEncoder passwordEncoder;
+    @Autowired private JwtService jwtService;
+    @Autowired private WebApplicationContext wac;
+    @Autowired @Qualifier("springSecurityFilterChain") private Filter springSecurityFilterChain;
 
+    private MockMvc mockMvc;
     private User adminUser;
     private User teacher1;
     private User teacher2;
@@ -68,6 +84,9 @@ class FeedbackAndMultiClassIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        mockMvc = MockMvcBuilders.webAppContextSetup(wac)
+                .addFilters(springSecurityFilterChain)
+                .build();
         feedbackRecipientRepository.deleteAll();
         feedbackRepository.deleteAll();
         visitSessionRepository.deleteAll();
@@ -263,5 +282,103 @@ class FeedbackAndMultiClassIntegrationTest {
                         .content("Nội dung hợp lệ dài hơn 5 ký tự")
                         .build()));
         assertEquals(HttpStatus.BAD_REQUEST, shortTitleEx.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("HTTP endpoints enforce role security and serialize expected JSON fields including isRead")
+    void testFeedbackAndNotificationHttpEndpointsAndSecurity() throws Exception {
+        String adminToken = jwtService.generateToken(adminUser);
+        String teacher1Token = jwtService.generateToken(teacher1);
+        String teacher2Token = jwtService.generateToken(teacher2);
+        String student1Token = jwtService.generateToken(student1);
+        String student2Token = jwtService.generateToken(student2);
+
+        mockMvc.perform(get("/notifications/summary"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/feedbacks/inbox"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/feedbacks/inbox")
+                        .header("Authorization", "Bearer " + student1Token))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/student/feedbacks")
+                        .header("Authorization", "Bearer " + teacher1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"category\":\"OTHER\",\"title\":\"Test title\",\"content\":\"Valid content here\"}"))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/student/feedbacks")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"category\":\"OTHER\",\"title\":\"Test title\",\"content\":\"Valid content here\"}"))
+                .andExpect(status().isForbidden());
+
+        auth(student1);
+        StudentAssignmentResponse req = studentClassService.joinClass(JoinClassRequest.builder().classCode("FB12A1").build());
+        auth(teacher1);
+        teacherClassService.reviewStudentAssignment(req.getId(),
+                ReviewStudentAssignmentRequest.builder().status(StudentAssignmentStatus.APPROVED).build());
+        SecurityContextHolder.clearContext();
+
+        String createdBody = mockMvc.perform(post("/student/feedbacks")
+                        .header("Authorization", "Bearer " + student1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"category\":\"EXAM_REQUEST\",\"title\":\"Thêm đề ôn chương 2\",\"content\":\"Em muốn luyện thêm đề trắc nghiệm chương 2.\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.isRead").value(false))
+                .andExpect(jsonPath("$.category").value("EXAM_REQUEST"))
+                .andExpect(jsonPath("$.recipientLabels[0]").exists())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String feedbackId = feedbackRepository.findAllByOrderByCreatedAtDesc().get(0).getId().toString();
+        assertTrue(createdBody.contains(feedbackId));
+
+        mockMvc.perform(get("/student/feedbacks")
+                        .header("Authorization", "Bearer " + student1Token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].isRead").value(false));
+
+        mockMvc.perform(get("/feedbacks/inbox")
+                        .header("Authorization", "Bearer " + teacher1Token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.unreadCount").value(1))
+                .andExpect(jsonPath("$.items[0].isRead").value(false));
+
+        mockMvc.perform(patch("/feedbacks/" + feedbackId + "/read")
+                        .header("Authorization", "Bearer " + student2Token))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(patch("/feedbacks/" + feedbackId + "/read")
+                        .header("Authorization", "Bearer " + teacher2Token))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(patch("/feedbacks/" + feedbackId + "/read")
+                        .header("Authorization", "Bearer " + teacher1Token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isRead").value(true));
+
+        mockMvc.perform(get("/notifications/summary")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.role").value("ADMIN"))
+                .andExpect(jsonPath("$.unreadFeedbackCount").value(1));
+
+        mockMvc.perform(get("/notifications/summary")
+                        .header("Authorization", "Bearer " + teacher1Token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.role").value("TEACHER"))
+                .andExpect(jsonPath("$.pendingClassRequestCount").value(0))
+                .andExpect(jsonPath("$.unreadFeedbackCount").value(0));
+
+        mockMvc.perform(get("/notifications/summary")
+                        .header("Authorization", "Bearer " + student1Token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.role").value("STUDENT"))
+                .andExpect(jsonPath("$.approvedClasses[0].assignmentId").value(req.getId().toString()))
+                .andExpect(jsonPath("$.approvedClasses[0].className").value("Lớp 12A1"));
     }
 }

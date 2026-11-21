@@ -248,15 +248,17 @@ export default function AssistantWidget() {
   const activeNotification = useMemo(() => {
     if (role === 'TEACHER') {
       if (pendingClassRequestCount > 0) {
+        const actions = [{ to: '/giao-vien/duyet-hoc-sinh', label: 'Xem yêu cầu →' }]
+        if (unreadFeedbackCount > 0) {
+          actions.push({ to: '/?inbox=1', label: 'Mở hòm thư →' })
+        }
         return {
           key: `teacher-pending-${pendingClassRequestCount}-${unreadFeedbackCount}`,
           tone: 'warning',
           title: 'Yêu cầu vào lớp mới',
           message: `Có ${pendingClassRequestCount} học sinh đã gửi yêu cầu xin vào lớp.`,
           secondaryNote: unreadFeedbackCount > 0 ? `Ngoài ra có ${unreadFeedbackCount} góp ý chưa đọc trong hòm thư.` : null,
-          actions: [
-            { to: '/giao-vien/duyet-hoc-sinh', label: 'Xem yêu cầu →' },
-          ],
+          actions,
         }
       }
       if (unreadFeedbackCount > 0) {

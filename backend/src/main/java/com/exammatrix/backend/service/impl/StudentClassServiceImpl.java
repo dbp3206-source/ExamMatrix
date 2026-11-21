@@ -26,6 +26,9 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -96,13 +99,13 @@ public class StudentClassServiceImpl implements StudentClassService {
                 .map(this::toAssignmentResponse)
                 .toList();
 
-        java.util.Set<java.util.UUID> approvedTeacherIds = approvedClasses.stream()
+        Set<UUID> approvedTeacherIds = approvedClasses.stream()
                 .map(StudentAssignmentResponse::getTeacherId)
-                .collect(java.util.stream.Collectors.toSet());
+                .collect(Collectors.toSet());
 
-        java.util.Set<java.util.UUID> pendingTeacherIds = pendingRequests.stream()
+        Set<UUID> pendingTeacherIds = pendingRequests.stream()
                 .map(StudentAssignmentResponse::getTeacherId)
-                .collect(java.util.stream.Collectors.toSet());
+                .collect(Collectors.toSet());
 
         List<StudentClassDiscoveryResponse.DiscoverableClassItem> availableClasses = teacherClassRepository
                 .findAllByOrderByNameAsc()

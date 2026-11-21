@@ -222,8 +222,8 @@ export default function StudentFeedbackPage() {
                       <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{item.content}</p>
                       <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs text-slate-500">
                         <span>Nơi nhận:</span>
-                        {(item.recipientLabels || []).map((label) => (
-                          <span key={label} className="rounded-md bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
+                        {(item.recipientLabels || []).map((label, index) => (
+                          <span key={`${item.id}-${index}`} className="rounded-md bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
                             {label}
                           </span>
                         ))}
