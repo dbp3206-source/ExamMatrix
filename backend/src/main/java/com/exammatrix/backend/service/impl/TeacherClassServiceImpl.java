@@ -158,30 +158,6 @@ public class TeacherClassServiceImpl implements TeacherClassService {
 
         LocalDateTime now = LocalDateTime.now();
 
-        if (request.getStatus() == StudentAssignmentStatus.APPROVED) {
-
-            List<StudentTeacherAssignment> existingApproved = assignmentRepository
-                    .findByStudent_IdAndStatus(assignment.getStudent().getId(), StudentAssignmentStatus.APPROVED);
-            boolean transitionedOld = false;
-            String newClassName = assignment.getTeacherClass() != null
-                    ? assignment.getTeacherClass().getName()
-                    : assignment.getTeacher().getFullName();
-            for (StudentTeacherAssignment oldAssignment : existingApproved) {
-                if (!oldAssignment.getId().equals(assignment.getId())) {
-                    oldAssignment.setStatus(StudentAssignmentStatus.TRANSFERRED);
-                    oldAssignment.setReviewedAt(now);
-                    oldAssignment.setReviewedBy(currentUser);
-                    oldAssignment.setDecisionNote("Đã chuyển sang lớp " + newClassName);
-                    assignmentRepository.save(oldAssignment);
-                    transitionedOld = true;
-                }
-            }
-            if (transitionedOld) {
-
-                assignmentRepository.flush();
-            }
-        }
-
         assignment.setStatus(request.getStatus());
         assignment.setReviewedAt(now);
         assignment.setReviewedBy(currentUser);

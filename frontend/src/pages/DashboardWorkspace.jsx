@@ -38,6 +38,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { EmptyState, ErrorState, LoadingState, PageHeader } from '@/components/common/StateFeedback'
+import FeedbackInboxButton from '@/components/common/FeedbackInboxButton'
 import { AnimatedBackground } from '@/components/motion-primitives/animated-background'
 import { TransitionPanel } from '@/components/motion-primitives/transition-panel'
 import { cn } from '@/lib/utils'
@@ -232,7 +233,8 @@ function AdminDashboardWorkspace({ analytics, weekStart, setWeekStart, onRefresh
         title="Tổng quan quản trị"
         description="Lượt phiên truy cập theo tuần (GMT+7) và bảng xếp hạng hoạt động nổi bật."
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <FeedbackInboxButton role="ADMIN" />
             <Button size="sm" variant="outline" asChild>
               <Link to="/ket-qua">
                 Xem Kết quả
@@ -527,10 +529,13 @@ function TeacherDashboardWorkspace({
         title="Tổng quan giáo viên"
         description="Theo dõi ngân hàng câu hỏi bạn biên soạn và phổ điểm thang 10 của học sinh."
         actions={
-          <Button size="sm" variant="outline" onClick={onRefresh} disabled={isFetching}>
-            <RefreshCw className={cn('h-3.5 w-3.5', isFetching && 'animate-spin')} />
-            Làm mới
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <FeedbackInboxButton role="TEACHER" />
+            <Button size="sm" variant="outline" onClick={onRefresh} disabled={isFetching}>
+              <RefreshCw className={cn('h-3.5 w-3.5', isFetching && 'animate-spin')} />
+              Làm mới
+            </Button>
+          </div>
         }
       />
 

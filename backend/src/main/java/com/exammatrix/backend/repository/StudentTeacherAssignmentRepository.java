@@ -32,6 +32,21 @@ public interface StudentTeacherAssignmentRepository extends JpaRepository<Studen
             StudentAssignmentStatus status
     );
 
+    @EntityGraph(attributePaths = {"teacher", "teacherClass"})
+    java.util.List<StudentTeacherAssignment> findByStudent_IdAndStatusOrderByReviewedAtDesc(
+            UUID studentId,
+            StudentAssignmentStatus status
+    );
+
+    @EntityGraph(attributePaths = {"teacher", "teacherClass"})
+    Optional<StudentTeacherAssignment> findFirstByStudent_IdAndTeacher_IdAndStatusOrderByRequestedAtDesc(
+            UUID studentId,
+            UUID teacherId,
+            StudentAssignmentStatus status
+    );
+
+    long countByTeacher_IdAndStatus(UUID teacherId, StudentAssignmentStatus status);
+
     Optional<StudentTeacherAssignment> findFirstByStudent_IdAndStatusIn(
             UUID studentId,
             Collection<StudentAssignmentStatus> statuses

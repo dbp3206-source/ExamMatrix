@@ -1019,6 +1019,51 @@ export const mockApi = {
     return wait({ content: [], page: 0, size: 10, totalElements: 0, totalPages: 0 })
   },
   async getStudentClassDiscovery() {
-    return wait({ activeAssignment: null, pendingAssignment: null, latestAssignment: null, history: [], availableClasses: [] })
+    return wait({
+      activeAssignment: null,
+      pendingAssignment: null,
+      latestAssignment: null,
+      approvedClasses: [],
+      pendingRequests: [],
+      history: [],
+      availableClasses: [],
+    })
+  },
+  async submitStudentFeedback(body) {
+    return wait({
+      id: newId(),
+      studentId: '',
+      studentName: '',
+      studentEmail: '',
+      category: body?.category || 'OTHER',
+      title: body?.title || '',
+      content: body?.content || '',
+      isRead: false,
+      recipientLabels: ['Quản trị viên hệ thống'],
+      createdAt: new Date().toISOString(),
+    })
+  },
+  async getMyFeedbacks() {
+    return wait([])
+  },
+  async getFeedbackInbox() {
+    return wait({ unreadCount: 0, items: [] })
+  },
+  async markFeedbackRead(id) {
+    return wait({
+      id,
+      studentId: '',
+      studentName: '',
+      studentEmail: '',
+      category: 'OTHER',
+      title: '',
+      content: '',
+      isRead: true,
+      recipientLabels: [],
+      createdAt: new Date().toISOString(),
+    })
+  },
+  async getNotificationSummary() {
+    return wait({ role: 'STUDENT', pendingClassRequestCount: 0, unreadFeedbackCount: 0, approvedClasses: [] })
   },
 }

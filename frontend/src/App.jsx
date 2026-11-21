@@ -23,6 +23,7 @@ const UsersPage = lazy(() => import('@/pages/UsersPage'))
 const AdminResultsPage = lazy(() => import('@/pages/AdminResultsPage'))
 const ProfilePage = lazy(() => import('@/pages/ProfilePage'))
 const StudentTeacherPage = lazy(() => import('@/pages/StudentTeacherPage'))
+const StudentFeedbackPage = lazy(() => import('@/pages/StudentFeedbackPage'))
 const StudentExamsPage = lazy(() => import('@/pages/StudentExamsPage'))
 const StudentExamTakingPage = lazy(() => import('@/pages/StudentExamTakingPage'))
 const StudentResultPage = lazy(() => import('@/pages/StudentResultPage'))
@@ -82,6 +83,7 @@ export default function App() {
             <Route element={<StudentRoute />}>
               <Route path="hoc-sinh/tong-quan" element={<StudentDashboardPage />} />
               <Route path="hoc-sinh/giao-vien" element={<StudentTeacherPage />} />
+              <Route path="hoc-sinh/gop-y" element={<StudentFeedbackPage />} />
               <Route path="hoc-sinh/de-thi" element={<StudentExamsPage />} />
               <Route path="hoc-sinh/lam-bai/:paperId" element={<StudentExamTakingPage />} />
               <Route path="hoc-sinh/ket-qua/:attemptId" element={<StudentResultPage />} />

@@ -9,6 +9,8 @@ public record StudentClassDiscoveryResponse(
         StudentAssignmentResponse activeAssignment,
         StudentAssignmentResponse pendingAssignment,
         StudentAssignmentResponse latestAssignment,
+        List<StudentAssignmentResponse> approvedClasses,
+        List<StudentAssignmentResponse> pendingRequests,
         List<StudentAssignmentResponse> history,
         List<DiscoverableClassItem> availableClasses
 ) {
@@ -20,6 +22,8 @@ public record StudentClassDiscoveryResponse(
             String teacherName,
             ClassJoinMode joinMode,
             boolean requiresPassword,
-            long studentCount
+            long studentCount,
+            boolean alreadyApproved,
+            boolean alreadyPending
     ) {}
 }

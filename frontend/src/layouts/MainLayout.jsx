@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  MessageSquarePlus,
   UserCheck,
   UserCircle,
   Users,
@@ -53,6 +54,7 @@ function buildBreadcrumbs(pathname, role) {
     '/ket-qua': 'Kết quả',
     '/ho-so': 'Hồ sơ cá nhân',
     '/hoc-sinh/giao-vien': 'Lớp học & Giáo viên',
+    '/hoc-sinh/gop-y': 'Góp ý & Đề xuất',
   }
 
   if (staticMap[pathname]) {
@@ -107,6 +109,7 @@ export default function MainLayout() {
         { to: '/hoc-sinh/tong-quan', label: 'Tổng quan', icon: LayoutDashboard },
         { to: '/hoc-sinh/de-thi', label: 'Đề thi & Luyện tập', icon: FileText },
         { to: '/hoc-sinh/giao-vien', label: 'Lớp học & Giáo viên', icon: GraduationCap },
+        { to: '/hoc-sinh/gop-y', label: 'Góp ý & Đề xuất', icon: MessageSquarePlus },
         { to: '/ho-so', label: 'Hồ sơ cá nhân', icon: UserCircle },
       ]
     }

@@ -80,4 +80,9 @@ export const realApi = {
   updateTeacherClass: (body) => unwrap(http.patch('/teacher/classes', body)),
   previewImportQuestions: (formData) => unwrap(http.post('/questions/import/preview', formData, { headers: { 'Content-Type': 'multipart/form-data' } })),
   confirmImportQuestions: (body) => unwrap(http.post('/questions/import/confirm', body)),
+  submitStudentFeedback: (body) => unwrap(http.post('/student/feedbacks', body)),
+  getMyFeedbacks: () => unwrap(http.get('/student/feedbacks')),
+  getFeedbackInbox: () => unwrap(http.get('/feedbacks/inbox')),
+  markFeedbackRead: (id) => unwrap(http.patch(`/feedbacks/${id}/read`)),
+  getNotificationSummary: () => unwrap(http.get('/notifications/summary')),
 }

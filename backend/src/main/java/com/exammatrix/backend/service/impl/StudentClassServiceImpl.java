@@ -73,17 +73,18 @@ public class StudentClassServiceImpl implements StudentClassService {
         List<StudentTeacherAssignment> allHistory = assignmentRepository
                 .findByStudent_IdOrderByRequestedAtDesc(student.getId());
 
-        StudentAssignmentResponse activeAssignment = allHistory.stream()
+        List<StudentAssignmentResponse> approvedClasses = allHistory.stream()
                 .filter(a -> a.getStatus() == StudentAssignmentStatus.APPROVED)
-                .findFirst()
                 .map(this::toAssignmentResponse)
-                .orElse(null);
+                .toList();
 
-        StudentAssignmentResponse pendingAssignment = allHistory.stream()
+        List<StudentAssignmentResponse> pendingRequests = allHistory.stream()
                 .filter(a -> a.getStatus() == StudentAssignmentStatus.PENDING)
-                .findFirst()
                 .map(this::toAssignmentResponse)
-                .orElse(null);
+                .toList();
+
+        StudentAssignmentResponse activeAssignment = approvedClasses.isEmpty() ? null : approvedClasses.get(0);
+        StudentAssignmentResponse pendingAssignment = pendingRequests.isEmpty() ? null : pendingRequests.get(0);
 
         StudentAssignmentResponse latestAssignment = allHistory.stream()
                 .findFirst()
@@ -94,6 +95,14 @@ public class StudentClassServiceImpl implements StudentClassService {
                 .limit(20)
                 .map(this::toAssignmentResponse)
                 .toList();
+
+        java.util.Set<java.util.UUID> approvedTeacherIds = approvedClasses.stream()
+                .map(StudentAssignmentResponse::getTeacherId)
+                .collect(java.util.stream.Collectors.toSet());
+
+        java.util.Set<java.util.UUID> pendingTeacherIds = pendingRequests.stream()
+                .map(StudentAssignmentResponse::getTeacherId)
+                .collect(java.util.stream.Collectors.toSet());
 
         List<StudentClassDiscoveryResponse.DiscoverableClassItem> availableClasses = teacherClassRepository
                 .findAllByOrderByNameAsc()
@@ -110,7 +119,9 @@ public class StudentClassServiceImpl implements StudentClassService {
                         tc.getTeacher().getFullName(),
                         tc.effectiveJoinMode(),
                         tc.requiresPassword(),
-                        assignmentRepository.countByTeacherClass_IdAndStatus(tc.getId(), StudentAssignmentStatus.APPROVED)
+                        assignmentRepository.countByTeacherClass_IdAndStatus(tc.getId(), StudentAssignmentStatus.APPROVED),
+                        approvedTeacherIds.contains(tc.getTeacher().getId()),
+                        pendingTeacherIds.contains(tc.getTeacher().getId())
                 ))
                 .toList();
 
@@ -118,6 +129,8 @@ public class StudentClassServiceImpl implements StudentClassService {
                 activeAssignment,
                 pendingAssignment,
                 latestAssignment,
+                approvedClasses,
+                pendingRequests,
                 history,
                 availableClasses
         );
@@ -160,35 +173,23 @@ public class StudentClassServiceImpl implements StudentClassService {
             }
         }
 
-        Optional<StudentTeacherAssignment> activeApprovedOpt = assignmentRepository
-                .findFirstByStudent_IdAndStatusOrderByRequestedAtDesc(student.getId(), StudentAssignmentStatus.APPROVED);
-        if (activeApprovedOpt.isPresent()
-                && activeApprovedOpt.get().getTeacher().getId().equals(teacher.getId())) {
-            return toAssignmentResponse(activeApprovedOpt.get());
+        Optional<StudentTeacherAssignment> existingApprovedOpt = assignmentRepository
+                .findFirstByStudent_IdAndTeacher_IdAndStatusOrderByRequestedAtDesc(
+                        student.getId(), teacher.getId(), StudentAssignmentStatus.APPROVED);
+        if (existingApprovedOpt.isPresent()) {
+            return toAssignmentResponse(existingApprovedOpt.get());
         }
 
         Optional<StudentTeacherAssignment> existingPendingOpt = assignmentRepository
-                .findFirstByStudent_IdAndStatusOrderByRequestedAtDesc(student.getId(), StudentAssignmentStatus.PENDING);
+                .findFirstByStudent_IdAndTeacher_IdAndStatusOrderByRequestedAtDesc(
+                        student.getId(), teacher.getId(), StudentAssignmentStatus.PENDING);
         if (existingPendingOpt.isPresent()) {
-            StudentTeacherAssignment pending = existingPendingOpt.get();
-            if (pending.getTeacher().getId().equals(teacher.getId())) {
-
-                return toAssignmentResponse(pending);
-            }
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Bạn đang có một yêu cầu chờ duyệt tới lớp "
-                            + (pending.getTeacherClass() != null ? pending.getTeacherClass().getName() : pending.getTeacher().getFullName())
-                            + ". Vui lòng đợi giáo viên xử lý trước khi gửi yêu cầu mới."
-            );
+            return toAssignmentResponse(existingPendingOpt.get());
         }
 
-        boolean isTransfer = activeApprovedOpt.isPresent();
-        String note = isTransfer
-                ? "Yêu cầu chuyển lớp (đang giữ quyền lớp cũ cho đến khi được duyệt)"
-                : (mode == ClassJoinMode.REQUEST_WITH_PASSWORD
-                        ? "Gửi yêu cầu tham gia lớp bằng mật khẩu"
-                        : "Gửi yêu cầu tham gia lớp mở");
+        String note = mode == ClassJoinMode.REQUEST_WITH_PASSWORD
+                ? "Gửi yêu cầu tham gia lớp bằng mật khẩu"
+                : "Gửi yêu cầu tham gia lớp mở";
 
         StudentTeacherAssignment newAssignment = StudentTeacherAssignment.builder()
                 .student(student)

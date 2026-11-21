@@ -1,13 +1,32 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { Mascot } from 'page-mascot'
-import { ArrowRight, BookOpenCheck, CircleHelp, ClipboardCheck, Grid3X3, GripVertical, Lightbulb, RotateCcw, Users, X } from 'lucide-react'
+import {
+  ArrowRight,
+  Bell,
+  BookOpenCheck,
+  CheckCircle2,
+  CircleHelp,
+  ClipboardCheck,
+  Grid3X3,
+  GripVertical,
+  Inbox,
+  Lightbulb,
+  MessageSquarePlus,
+  RotateCcw,
+  UserCheck,
+  Users,
+  X,
+} from 'lucide-react'
+import { api } from '@/api/service'
 import { useAuth } from '@/auth/AuthContext'
 import { roleLabel } from '@/constants'
 import { cn } from '@/lib/utils'
 
 const POSITION_STORAGE_KEY = 'exam_assistant_position_v1'
+const SEEN_APPROVED_PREFIX = 'exam_seen_approved_classes_v1_'
 const VIEWPORT_PADDING = 12
 const DRAG_THRESHOLD_PX = 5
 const DEFAULT_WIDGET_WIDTH = 168
@@ -38,6 +57,28 @@ function loadSavedPosition() {
   return null
 }
 
+function loadSeenApprovedIds(userId) {
+  if (typeof window === 'undefined' || !userId) return []
+  try {
+    const raw = window.localStorage.getItem(`${SEEN_APPROVED_PREFIX}${userId}`)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function saveSeenApprovedIds(userId, ids) {
+  if (typeof window === 'undefined' || !userId) return
+  try {
+    const unique = Array.from(new Set(ids.filter((item) => typeof item === 'string')))
+    window.localStorage.setItem(`${SEEN_APPROVED_PREFIX}${userId}`, JSON.stringify(unique))
+  } catch {
+    return
+  }
+}
+
 const directions = '/mascots/exam-matrix-directions.png'
 const reactions = '/mascots/exam-matrix-reactions.png'
 
@@ -63,6 +104,11 @@ const helpByPath = [
     message: 'Kiểm tra phạm vi lớp và thời lượng trước khi bắt đầu. Bài đang làm có thể tiếp tục từ danh sách này.',
   },
   {
+    match: (path) => path === '/hoc-sinh/gop-y',
+    title: 'Góp ý & Đề xuất',
+    message: 'Gửi góp ý hệ thống hoặc đề xuất thêm môn học, đề thi tới quản trị viên và giáo viên các lớp bạn đang theo học.',
+  },
+  {
     match: (path) => path.startsWith('/hoc-sinh/ket-qua/'),
     title: 'Đọc kết quả bài thi',
     message: 'Điểm trắc nghiệm có sau khi nộp. Nếu bài có tự luận, kết quả cuối cùng chỉ xuất hiện sau khi giáo viên chấm xong.',
@@ -76,18 +122,20 @@ const helpByPath = [
 
 const linksByRole = {
   ADMIN: [
-    { to: '/?view=coverage', label: 'Độ phủ học liệu', icon: BookOpenCheck },
+    { to: '/?inbox=1', label: 'Hòm thư góp ý', icon: Inbox },
     { to: '/nguoi-dung', label: 'Quản lý tài khoản', icon: Users },
     { to: '/cau-hoi', label: 'Ngân hàng câu hỏi', icon: BookOpenCheck },
   ],
   TEACHER: [
-    { to: '/?view=bank', label: 'Tổng quan ngân hàng', icon: BookOpenCheck },
+    { to: '/giao-vien/duyet-hoc-sinh', label: 'Duyệt học sinh vào lớp', icon: UserCheck },
+    { to: '/?inbox=1', label: 'Hòm thư góp ý', icon: Inbox },
     { to: '/ma-tran', label: 'Tạo ma trận đề', icon: Grid3X3 },
     { to: '/giao-vien/cham-thi', label: 'Bài chờ chấm', icon: ClipboardCheck },
   ],
   STUDENT: [
     { to: '/hoc-sinh/tong-quan?view=activity', label: 'Tiến độ của tôi', icon: BookOpenCheck },
     { to: '/hoc-sinh/de-thi', label: 'Đề thi & luyện tập', icon: ClipboardCheck },
+    { to: '/hoc-sinh/gop-y', label: 'Góp ý & Đề xuất', icon: MessageSquarePlus },
     { to: '/ho-so', label: 'Hồ sơ cá nhân', icon: Users },
   ],
 }
@@ -142,6 +190,8 @@ export default function AssistantWidget() {
   const [hint, setHint] = useState(null)
   const [position, setPosition] = useState(loadSavedPosition)
   const [dragging, setDragging] = useState(false)
+  const [dismissedBubbleKey, setDismissedBubbleKey] = useState('')
+  const [seenApprovedIds, setSeenApprovedIds] = useState(() => loadSeenApprovedIds(user?.id))
   const containerRef = useRef(null)
   const triggerRef = useRef(null)
   const closeRef = useRef(null)
@@ -160,6 +210,133 @@ export default function AssistantWidget() {
   const suppressNextClickRef = useRef(false)
   const pageGuide = useMemo(() => getPageGuide(location.pathname, role), [location.pathname, role])
   const quickLinks = linksByRole[role] || linksByRole.TEACHER
+
+  useEffect(() => {
+    setSeenApprovedIds(loadSeenApprovedIds(user?.id))
+    setDismissedBubbleKey('')
+  }, [user?.id])
+
+  const notificationQuery = useQuery({
+    queryKey: ['notifications', 'summary', user?.id],
+    queryFn: () => api.getNotificationSummary(),
+    enabled: Boolean(user?.id) && !isQuietRoute,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+    staleTime: 0,
+  })
+
+  const summary = notificationQuery.data
+  const pendingClassRequestCount = Number(summary?.pendingClassRequestCount || 0)
+  const unreadFeedbackCount = Number(summary?.unreadFeedbackCount || 0)
+  const approvedClasses = useMemo(() => summary?.approvedClasses || [], [summary])
+
+  const unseenApprovedClasses = useMemo(() => {
+    if (role !== 'STUDENT') return []
+    const seenSet = new Set(seenApprovedIds)
+    return approvedClasses.filter((item) => item?.assignmentId && !seenSet.has(item.assignmentId))
+  }, [role, approvedClasses, seenApprovedIds])
+
+  const acknowledgeStudentClasses = useCallback(() => {
+    if (!user?.id || unseenApprovedClasses.length === 0) return
+    const nextIds = [...seenApprovedIds, ...unseenApprovedClasses.map((item) => item.assignmentId)]
+    saveSeenApprovedIds(user.id, nextIds)
+    setSeenApprovedIds(nextIds)
+  }, [user?.id, seenApprovedIds, unseenApprovedClasses])
+
+  const activeNotification = useMemo(() => {
+    if (role === 'TEACHER') {
+      if (pendingClassRequestCount > 0) {
+        return {
+          key: `teacher-pending-${pendingClassRequestCount}-${unreadFeedbackCount}`,
+          tone: 'warning',
+          title: 'Yêu cầu vào lớp mới',
+          message: `Có ${pendingClassRequestCount} học sinh đã gửi yêu cầu xin vào lớp.`,
+          secondaryNote: unreadFeedbackCount > 0 ? `Ngoài ra có ${unreadFeedbackCount} góp ý chưa đọc trong hòm thư.` : null,
+          actions: [
+            { to: '/giao-vien/duyet-hoc-sinh', label: 'Xem yêu cầu →' },
+          ],
+        }
+      }
+      if (unreadFeedbackCount > 0) {
+        return {
+          key: `teacher-feedback-${unreadFeedbackCount}`,
+          tone: 'info',
+          title: 'Hòm thư góp ý',
+          message: `Có ${unreadFeedbackCount} góp ý mới từ học sinh lớp bạn.`,
+          secondaryNote: null,
+          actions: [
+            { to: '/?inbox=1', label: 'Mở hòm thư →' },
+          ],
+        }
+      }
+      return null
+    }
+
+    if (role === 'STUDENT' && unseenApprovedClasses.length > 0) {
+      const first = unseenApprovedClasses[0]
+      const message =
+        unseenApprovedClasses.length === 1
+          ? `Bạn đã được duyệt vào lớp ${first.className} (GV: ${first.teacherName})!`
+          : `Bạn đã được duyệt vào ${unseenApprovedClasses.length} lớp học mới: ${unseenApprovedClasses.map((c) => c.className).join(', ')}!`
+      return {
+        key: `student-approved-${unseenApprovedClasses.map((c) => c.assignmentId).join(',')}`,
+        tone: 'success',
+        title: 'Đã được duyệt vào lớp',
+        message,
+        secondaryNote: null,
+        actions: [
+          { to: '/hoc-sinh/giao-vien', label: 'Xem lớp học →' },
+          { to: '/hoc-sinh/de-thi', label: 'Làm đề ngay →' },
+        ],
+      }
+    }
+
+    if (role === 'ADMIN' && unreadFeedbackCount > 0) {
+      return {
+        key: `admin-feedback-${unreadFeedbackCount}`,
+        tone: 'info',
+        title: 'Hòm thư góp ý mới',
+        message: `Có ${unreadFeedbackCount} góp ý mới trong hòm thư.`,
+        secondaryNote: null,
+        actions: [
+          { to: '/?inbox=1', label: 'Mở hòm thư →' },
+        ],
+      }
+    }
+
+    return null
+  }, [role, pendingClassRequestCount, unreadFeedbackCount, unseenApprovedClasses])
+
+  const badgeCount = useMemo(() => {
+    if (role === 'TEACHER') return pendingClassRequestCount + unreadFeedbackCount
+    if (role === 'STUDENT') return unseenApprovedClasses.length
+    if (role === 'ADMIN') return unreadFeedbackCount
+    return 0
+  }, [role, pendingClassRequestCount, unreadFeedbackCount, unseenApprovedClasses.length])
+
+  const showBubble = Boolean(
+    !open && !isQuietRoute && activeNotification && dismissedBubbleKey !== activeNotification.key,
+  )
+
+  const handleDismissBubble = () => {
+    if (!activeNotification) return
+    if (role === 'STUDENT') {
+      acknowledgeStudentClasses()
+    } else {
+      setDismissedBubbleKey(activeNotification.key)
+    }
+  }
+
+  const handleBubbleActionClick = () => {
+    if (role === 'STUDENT') {
+      acknowledgeStudentClasses()
+    } else if (activeNotification) {
+      setDismissedBubbleKey(activeNotification.key)
+    }
+    setOpen(false)
+  }
 
   const savePosition = useCallback((nextPos) => {
     try {
@@ -353,6 +530,72 @@ export default function AssistantWidget() {
       data-quiet={isQuietRoute}
       data-dragging={dragging}
     >
+      <AnimatePresence>
+        {showBubble && activeNotification && (
+          <motion.div
+            key={activeNotification.key}
+            role="status"
+            aria-live="polite"
+            initial={reduceMotion ? false : { opacity: 0, y: panelOpensBelow ? -6 : 6, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={reduceMotion ? undefined : { opacity: 0, y: panelOpensBelow ? -4 : 4, scale: 0.98 }}
+            transition={{ duration: reduceMotion ? 0 : 0.16, ease: 'easeOut' }}
+            className={cn(
+              'absolute w-[min(19.5rem,calc(100vw-1.5rem))] rounded-2xl border p-3.5 shadow-[0_14px_40px_-18px_rgba(15,23,42,0.45)]',
+              panelOpensBelow ? 'top-[4.75rem]' : 'bottom-[4.75rem]',
+              panelAlignsLeft ? 'left-0' : 'right-0',
+              activeNotification.tone === 'success'
+                ? 'border-teal-300 bg-teal-50/95 text-teal-950'
+                : activeNotification.tone === 'warning'
+                  ? 'border-amber-300 bg-amber-50/95 text-amber-950'
+                  : 'border-indigo-200 bg-white/95 text-slate-900',
+            )}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-xs font-extrabold">
+                {activeNotification.tone === 'success' ? (
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-teal-700" aria-hidden="true" />
+                ) : (
+                  <Bell className="h-4 w-4 shrink-0 text-amber-700" aria-hidden="true" />
+                )}
+                <span>{activeNotification.title}</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleDismissBubble}
+                aria-label="Đóng thông báo"
+                className="rounded-md p-0.5 text-slate-500 hover:bg-black/5 hover:text-slate-900 cursor-pointer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <p className="mt-1.5 text-xs font-medium leading-relaxed">{activeNotification.message}</p>
+            {activeNotification.secondaryNote && (
+              <p className="mt-1 text-[11px] opacity-80">{activeNotification.secondaryNote}</p>
+            )}
+            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+              {activeNotification.actions.map((action) => (
+                <Link
+                  key={action.to}
+                  to={action.to}
+                  onClick={handleBubbleActionClick}
+                  className={cn(
+                    'inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-bold transition-colors',
+                    activeNotification.tone === 'success'
+                      ? 'bg-teal-700 text-white hover:bg-teal-800'
+                      : activeNotification.tone === 'warning'
+                        ? 'bg-amber-700 text-white hover:bg-amber-800'
+                        : 'bg-indigo-600 text-white hover:bg-indigo-700',
+                  )}
+                >
+                  {action.label}
+                </Link>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div
         onPointerDown={handlePointerDown}
         className={cn(
@@ -368,7 +611,7 @@ export default function AssistantWidget() {
           label="trợ lý Exam Matrix"
           className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
         />
-        <div className="mb-1 flex items-center rounded-full border border-slate-300 bg-white shadow-md transition-colors hover:border-indigo-300">
+        <div className="relative mb-1 flex items-center rounded-full border border-slate-300 bg-white shadow-md transition-colors hover:border-indigo-300">
           <button
             type="button"
             onKeyDown={handleDragKeyDown}
@@ -393,6 +636,14 @@ export default function AssistantWidget() {
             <CircleHelp className="h-4 w-4 text-indigo-700" aria-hidden="true" />
             Trợ lý
           </button>
+          {badgeCount > 0 && (
+            <span
+              className="pointer-events-none absolute -top-1.5 -right-1.5 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-rose-600 px-1.5 py-0.5 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white tabular-nums"
+              aria-label={`${badgeCount} thông báo mới`}
+            >
+              {badgeCount > 99 ? '99+' : badgeCount}
+            </span>
+          )}
         </div>
       </div>
 
@@ -416,7 +667,7 @@ export default function AssistantWidget() {
             <div className="flex items-start justify-between gap-3 border-b border-slate-200 bg-[#f7f5ef] px-4 py-3.5">
               <div className="min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-teal-800">Trợ lý Exam Matrix</p>
-                <h2 id="exam-matrix-assistant-title" className="mt-1 text-base font-extrabold">Hướng dẫn nhanh</h2>
+                <h2 id="exam-matrix-assistant-title" className="mt-1 text-base font-extrabold">Thông báo & Hướng dẫn</h2>
                 <p className="mt-0.5 text-xs text-slate-600">{roleLabel(role)} · kéo biểu tượng để đổi vị trí</p>
               </div>
               <div className="flex items-center gap-1">
@@ -438,6 +689,40 @@ export default function AssistantWidget() {
             </div>
 
             <div className="space-y-4 p-4">
+              {activeNotification && (
+                <div
+                  className={cn(
+                    'rounded-xl border px-3.5 py-3 space-y-2',
+                    activeNotification.tone === 'success'
+                      ? 'border-teal-200 bg-teal-50 text-teal-950'
+                      : activeNotification.tone === 'warning'
+                        ? 'border-amber-200 bg-amber-50 text-amber-950'
+                        : 'border-indigo-200 bg-indigo-50/70 text-slate-900',
+                  )}
+                >
+                  <div className="flex items-center gap-2 text-xs font-bold">
+                    <Bell className="h-3.5 w-3.5" />
+                    {activeNotification.title}
+                  </div>
+                  <p className="text-xs leading-relaxed">{activeNotification.message}</p>
+                  {activeNotification.secondaryNote && (
+                    <p className="text-[11px] opacity-80">{activeNotification.secondaryNote}</p>
+                  )}
+                  <div className="flex flex-wrap gap-2 pt-0.5">
+                    {activeNotification.actions.map((action) => (
+                      <Link
+                        key={action.to}
+                        to={action.to}
+                        onClick={handleBubbleActionClick}
+                        className="text-xs font-bold underline underline-offset-2 hover:opacity-80"
+                      >
+                        {action.label}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {hint && (
                 <div className={cn('rounded-xl border px-3 py-2.5', hintStyles[hint.tone])}>
                   <div className="flex items-center gap-2 text-xs font-bold"><Lightbulb className="h-3.5 w-3.5" />{hint.title}</div>

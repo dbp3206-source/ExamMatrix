@@ -33,6 +33,8 @@ interface DiscoverableClassItem {
   joinMode: 'CLOSED' | 'REQUEST_OPEN' | 'REQUEST_WITH_PASSWORD'
   requiresPassword: boolean
   studentCount: number
+  alreadyApproved?: boolean
+  alreadyPending?: boolean
 }
 
 interface AssignmentItem {
@@ -52,6 +54,8 @@ interface DiscoveryResponse {
   activeAssignment: AssignmentItem | null
   pendingAssignment: AssignmentItem | null
   latestAssignment: AssignmentItem | null
+  approvedClasses?: AssignmentItem[]
+  pendingRequests?: AssignmentItem[]
   history: AssignmentItem[]
   availableClasses: DiscoverableClassItem[]
 }
@@ -92,6 +96,7 @@ export default function StudentTeacherPage() {
       queryClient.invalidateQueries({ queryKey: ['student', 'class-discovery'] })
       queryClient.invalidateQueries({ queryKey: ['student', 'exams'] })
       queryClient.invalidateQueries({ queryKey: ['student', 'exam-subjects'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'summary'] })
     },
     onError: (err: Error) => {
       const msg = err?.message || 'Không thể gửi yêu cầu tham gia lớp học'
@@ -108,10 +113,13 @@ export default function StudentTeacherPage() {
   }
 
   const data = discoveryQuery.data
-  const active = data?.activeAssignment || null
-  const pending = data?.pendingAssignment || null
+  const approvedClasses = data?.approvedClasses ?? (data?.activeAssignment ? [data.activeAssignment] : [])
+  const pendingRequests = data?.pendingRequests ?? (data?.pendingAssignment ? [data.pendingAssignment] : [])
   const availableClasses = data?.availableClasses || []
   const history = data?.history || []
+
+  const approvedClassCodes = new Set(approvedClasses.map((a) => a.classCode))
+  const pendingClassCodes = new Set(pendingRequests.map((a) => a.classCode))
 
   const openJoinModal = (cls: DiscoverableClassItem) => {
     setFormError('')
@@ -137,7 +145,7 @@ export default function StudentTeacherPage() {
       <PageHeader
         accent="teal"
         title="Khám phá & Tham gia lớp học"
-        description="Gửi yêu cầu tham gia hoặc chuyển lớp. Giáo viên duyệt xong bạn mới mở quyền làm đề thi lớp học."
+        description="Bạn có thể tham gia đồng thời nhiều lớp học. Sau khi giáo viên duyệt, đề thi riêng của từng lớp sẽ tự động mở."
         action={
           <Button variant="outline" size="sm" asChild>
             <Link to="/hoc-sinh/de-thi">
@@ -151,68 +159,88 @@ export default function StudentTeacherPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="border-slate-200 shadow-xs">
           <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <GraduationCap className="h-4 w-4 text-teal-700" />
-              Lớp hiện tại của bạn
+            <CardTitle className="flex items-center justify-between gap-2 text-base">
+              <span className="flex items-center gap-2">
+                <GraduationCap className="h-4 w-4 text-teal-700" />
+                Các lớp bạn đang theo học
+              </span>
+              <Badge variant="neutral" className="tabular-nums">{approvedClasses.length} lớp</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {active ? (
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <div className="text-base font-bold text-slate-900">{active.className || 'Lớp học'}</div>
-                    <div className="text-xs text-slate-600">
-                      Giáo viên: <strong>{active.teacherName}</strong> · Mã lớp: <code className="font-semibold">{active.classCode}</code>
+            {approvedClasses.length > 0 ? (
+              <div className="space-y-3">
+                {approvedClasses.map((cls) => (
+                  <div
+                    key={cls.id}
+                    className="rounded-lg border border-slate-200/80 bg-slate-50/60 p-3 space-y-1.5"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-sm font-bold text-slate-900">{cls.className || 'Lớp học'}</div>
+                        <div className="text-xs text-slate-600">
+                          Giáo viên: <strong>{cls.teacherName}</strong> · Mã lớp: <code className="font-semibold">{cls.classCode}</code>
+                        </div>
+                      </div>
+                      <Badge variant="success">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Đã duyệt
+                      </Badge>
                     </div>
+                    {cls.reviewedAt && (
+                      <p className="text-[11px] text-slate-500">
+                        Được duyệt lúc {formatDateTime(cls.reviewedAt)}
+                      </p>
+                    )}
                   </div>
-                  <Badge variant="success">
-                    <CheckCircle2 className="h-3 w-3" />
-                    Đã duyệt
-                  </Badge>
-                </div>
-                {active.reviewedAt && (
-                  <p className="text-xs text-slate-500">
-                    Được duyệt lúc {formatDateTime(active.reviewedAt)}. Bạn có thể gửi yêu cầu chuyển lớp khác nếu cần; lớp hiện tại vẫn giữ hiệu lực cho tới khi lớp mới duyệt.
-                  </p>
-                )}
+                ))}
               </div>
             ) : (
               <p className="text-sm text-slate-600">
-                Bạn chưa tham gia lớp học nào. Chọn một lớp bên dưới hoặc nhập mã lớp để gửi yêu cầu.
+                Bạn chưa tham gia lớp học nào. Chọn một hoặc nhiều lớp bên dưới hoặc nhập mã lớp để gửi yêu cầu.
               </p>
             )}
           </CardContent>
         </Card>
 
-        <Card className={pending ? 'border-amber-300 bg-amber-50/40 shadow-xs' : 'border-slate-200 shadow-xs'}>
+        <Card className={pendingRequests.length > 0 ? 'border-amber-300 bg-amber-50/40 shadow-xs' : 'border-slate-200 shadow-xs'}>
           <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Clock className="h-4 w-4 text-amber-600" />
-              Yêu cầu đang chờ duyệt
+            <CardTitle className="flex items-center justify-between gap-2 text-base">
+              <span className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-amber-600" />
+                Yêu cầu đang chờ duyệt
+              </span>
+              {pendingRequests.length > 0 && (
+                <Badge variant="warning" className="tabular-nums">{pendingRequests.length} yêu cầu</Badge>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {pending ? (
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <div className="text-sm font-bold text-slate-900">
-                      {pending.className || 'Lớp học'} ({pending.classCode})
+            {pendingRequests.length > 0 ? (
+              <div className="space-y-2.5">
+                {pendingRequests.map((req) => (
+                  <div
+                    key={req.id}
+                    className="rounded-lg border border-amber-200 bg-white/80 p-3 space-y-1"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <div className="text-sm font-bold text-slate-900">
+                          {req.className || 'Lớp học'} ({req.classCode})
+                        </div>
+                        <div className="text-xs text-slate-600">Giáo viên: {req.teacherName}</div>
+                      </div>
+                      <Badge variant="warning">Đang chờ duyệt</Badge>
                     </div>
-                    <div className="text-xs text-slate-600">Giáo viên: {pending.teacherName}</div>
+                    {req.requestedAt && (
+                      <p className="text-[11px] text-slate-500">Gửi lúc {formatDateTime(req.requestedAt)}</p>
+                    )}
                   </div>
-                  <Badge variant="warning">Đang chờ duyệt</Badge>
-                </div>
-                <p className="text-xs text-amber-900">
-                  {active
-                    ? 'Đây là yêu cầu chuyển lớp. Quyền truy cập lớp cũ vẫn giữ nguyên cho đến khi giáo viên lớp mới phê duyệt.'
-                    : 'Yêu cầu đã được gửi tới giáo viên. Sau khi được duyệt, các đề thi lớp học sẽ tự động mở.'}
-                </p>
+                ))}
               </div>
             ) : (
               <p className="text-sm text-slate-600">
-                Không có yêu cầu nào đang chờ xử lý. Bạn có thể gửi tối đa 1 yêu cầu tham gia hoặc chuyển lớp tại một thời điểm.
+                Không có yêu cầu nào đang chờ xử lý. Bạn có thể gửi yêu cầu tham gia thêm lớp học mới bất kỳ lúc nào.
               </p>
             )}
           </CardContent>
@@ -232,9 +260,8 @@ export default function StudentTeacherPage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {availableClasses.map((cls) => {
-              const isCurrentActive = active?.classCode === cls.classCode
-              const isCurrentPending = pending?.classCode === cls.classCode
-              const blockedByOtherPending = Boolean(pending && !isCurrentPending)
+              const isApproved = Boolean(cls.alreadyApproved || approvedClassCodes.has(cls.classCode))
+              const isPending = Boolean(cls.alreadyPending || pendingClassCodes.has(cls.classCode))
               return (
                 <Card key={cls.classId} className="border-slate-200 shadow-xs flex flex-col justify-between">
                   <CardHeader className="pb-3">
@@ -267,11 +294,11 @@ export default function StudentTeacherPage() {
                       </span>
                     </div>
 
-                    {isCurrentActive ? (
+                    {isApproved ? (
                       <Button size="sm" variant="outline" disabled className="w-full">
                         Đang học lớp này
                       </Button>
-                    ) : isCurrentPending ? (
+                    ) : isPending ? (
                       <Button size="sm" variant="outline" disabled className="w-full">
                         Đang chờ duyệt
                       </Button>
@@ -280,10 +307,10 @@ export default function StudentTeacherPage() {
                         size="sm"
                         variant="teal"
                         className="w-full"
-                        disabled={blockedByOtherPending || joinMutation.isPending}
+                        disabled={joinMutation.isPending}
                         onClick={() => openJoinModal(cls)}
                       >
-                        {active ? 'Gửi yêu cầu chuyển lớp' : 'Gửi yêu cầu tham gia'}
+                        Gửi yêu cầu tham gia
                       </Button>
                     )}
                   </CardContent>
@@ -313,7 +340,7 @@ export default function StudentTeacherPage() {
                 value={manualCode}
                 onChange={(e) => setManualCode(e.target.value)}
                 placeholder="VD: TOAN12A1"
-                disabled={Boolean(pending) || joinMutation.isPending}
+                disabled={joinMutation.isPending}
               />
             </div>
             <div>
@@ -324,11 +351,11 @@ export default function StudentTeacherPage() {
                 value={manualPassword}
                 onChange={(e) => setManualPassword(e.target.value)}
                 placeholder="Để trống nếu là lớp mở"
-                disabled={Boolean(pending) || joinMutation.isPending}
+                disabled={joinMutation.isPending}
               />
             </div>
-            <Button type="submit" variant="teal" disabled={Boolean(pending) || joinMutation.isPending}>
-              {joinMutation.isPending ? 'Đang gửi...' : active ? 'Gửi yêu cầu chuyển lớp' : 'Gửi yêu cầu tham gia'}
+            <Button type="submit" variant="teal" disabled={joinMutation.isPending}>
+              {joinMutation.isPending ? 'Đang gửi...' : 'Gửi yêu cầu tham gia'}
             </Button>
           </form>
           {formError && !selectedClass && (
@@ -372,9 +399,7 @@ export default function StudentTeacherPage() {
         <Dialog open onOpenChange={(open) => { if (!open && !joinMutation.isPending) setSelectedClass(null) }}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>
-                {active ? `Chuyển sang lớp ${selectedClass.className}` : `Tham gia lớp ${selectedClass.className}`}
-              </DialogTitle>
+              <DialogTitle>Tham gia lớp {selectedClass.className}</DialogTitle>
             </DialogHeader>
             <form
               className="space-y-4"

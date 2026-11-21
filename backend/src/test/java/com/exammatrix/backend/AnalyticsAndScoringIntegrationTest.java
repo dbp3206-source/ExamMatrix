@@ -54,6 +54,8 @@ class AnalyticsAndScoringIntegrationTest {
     @Autowired private StudentAttemptAnswerRepository attemptAnswerRepository;
     @Autowired private QuestionImportRequestRepository importRequestRepository;
     @Autowired private UserVisitSessionRepository visitSessionRepository;
+    @Autowired private StudentFeedbackRecipientRepository feedbackRecipientRepository;
+    @Autowired private StudentFeedbackRepository feedbackRepository;
     @Autowired private PasswordEncoder passwordEncoder;
 
     private User adminUser;
@@ -67,6 +69,8 @@ class AnalyticsAndScoringIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        feedbackRecipientRepository.deleteAll();
+        feedbackRepository.deleteAll();
         visitSessionRepository.deleteAll();
         importRequestRepository.deleteAll();
         attemptAnswerRepository.deleteAll();
@@ -146,8 +150,8 @@ class AnalyticsAndScoringIntegrationTest {
     }
 
     @Test
-    @DisplayName("Item 15: Class discovery, REQUEST_OPEN & REQUEST_WITH_PASSWORD -> PENDING, atomic class transfer")
-    void testClassDiscoveryAndTransferLifecycle() {
+    @DisplayName("Item 15: Class discovery, REQUEST_OPEN & REQUEST_WITH_PASSWORD -> PENDING, concurrent multi-class enrollment")
+    void testClassDiscoveryAndMultiClassLifecycle() {
         auth(student1);
         StudentClassDiscoveryResponse discovery = studentClassService.getClassDiscovery();
         assertEquals(2, discovery.availableClasses().size());
@@ -162,24 +166,27 @@ class AnalyticsAndScoringIntegrationTest {
         assertEquals(StudentAssignmentStatus.APPROVED, approved1.getStatus());
 
         auth(student1);
-        StudentAssignmentResponse transferReq = studentClassService.joinClass(JoinClassRequest.builder()
+        StudentAssignmentResponse secondReq = studentClassService.joinClass(JoinClassRequest.builder()
                 .classCode("BETA02").build());
-        assertEquals(StudentAssignmentStatus.PENDING, transferReq.getStatus());
+        assertEquals(StudentAssignmentStatus.PENDING, secondReq.getStatus());
 
-        StudentClassDiscoveryResponse duringTransfer = studentClassService.getClassDiscovery();
-        assertEquals("ALPHA01", duringTransfer.activeAssignment().getClassCode());
-        assertEquals("BETA02", duringTransfer.pendingAssignment().getClassCode());
+        StudentClassDiscoveryResponse whilePendingSecond = studentClassService.getClassDiscovery();
+        assertEquals(1, whilePendingSecond.approvedClasses().size());
+        assertEquals(1, whilePendingSecond.pendingRequests().size());
+        assertEquals("ALPHA01", whilePendingSecond.activeAssignment().getClassCode());
+        assertEquals("BETA02", whilePendingSecond.pendingAssignment().getClassCode());
 
         auth(teacher2);
         StudentAssignmentResponse approved2 = teacherClassService.reviewStudentAssignment(
-                transferReq.getId(), ReviewStudentAssignmentRequest.builder().status(StudentAssignmentStatus.APPROVED).build());
+                secondReq.getId(), ReviewStudentAssignmentRequest.builder().status(StudentAssignmentStatus.APPROVED).build());
         assertEquals(StudentAssignmentStatus.APPROVED, approved2.getStatus());
 
         auth(student1);
-        StudentClassDiscoveryResponse afterTransfer = studentClassService.getClassDiscovery();
-        assertEquals("BETA02", afterTransfer.activeAssignment().getClassCode());
-        assertNull(afterTransfer.pendingAssignment());
-        assertTrue(afterTransfer.history().stream().anyMatch(h -> h.getStatus() == StudentAssignmentStatus.TRANSFERRED));
+        StudentClassDiscoveryResponse afterBothApproved = studentClassService.getClassDiscovery();
+        assertEquals(2, afterBothApproved.approvedClasses().size());
+        assertTrue(afterBothApproved.pendingRequests().isEmpty());
+        assertNull(afterBothApproved.pendingAssignment());
+        assertTrue(afterBothApproved.availableClasses().stream().allMatch(StudentClassDiscoveryResponse.DiscoverableClassItem::alreadyApproved));
     }
 
     @Test

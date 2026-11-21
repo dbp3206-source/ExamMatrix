@@ -139,6 +139,7 @@ export default function TeacherStudentRequestsPage() {
       setReviewTarget(null)
       setDecisionNote('')
       queryClient.invalidateQueries({ queryKey: ['teacher', 'student-requests'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'summary'] })
       refetchClass()
     },
     onError: (err) => toast.error(err.message || 'Không thể xử lý yêu cầu'),

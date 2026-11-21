@@ -229,6 +229,12 @@ public class SecurityConfig {
                 .requestMatchers("/dashboard/**")
                 .hasAnyRole("ADMIN", "TEACHER")
 
+                .requestMatchers("/feedbacks/**")
+                .hasAnyRole("ADMIN", "TEACHER")
+
+                .requestMatchers("/notifications/**")
+                .hasAnyRole("ADMIN", "TEACHER", "STUDENT")
+
                 .anyRequest().authenticated()
             )
 
