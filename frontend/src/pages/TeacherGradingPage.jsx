@@ -461,9 +461,11 @@ function GradingQuestionCard({ index, question, studentName, onSave, saving, can
               <div className="text-[11px] font-bold uppercase tracking-wider text-indigo-800">
                 {studentName ? `Bài làm của ${studentName}` : 'Bài làm của học sinh'}
               </div>
-              <div className="rounded-lg border border-slate-200 bg-[#F8F7F4] p-3.5 text-sm leading-relaxed text-slate-900 whitespace-pre-line">
-                {question.essayAnswer?.trim() || 'Học sinh để trống câu này.'}
-              </div>
+              {question.essayAnswer?.trim() && (
+                <div className="rounded-lg border border-slate-200 bg-[#F8F7F4] p-3.5 text-sm leading-relaxed text-slate-900 whitespace-pre-line">
+                  {question.essayAnswer.trim()}
+                </div>
+              )}
             </div>
 
             {canEdit ? (
