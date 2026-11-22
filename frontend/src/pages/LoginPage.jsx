@@ -286,7 +286,7 @@ export default function LoginPage() {
   }
 
   if (isAuthenticated) {
-    return <Navigate to={user?.role === 'STUDENT' ? '/hoc-sinh/tong-quan' : '/'} replace />
+    return <Navigate to={resolvePostLoginTarget(user?.role)} replace />
   }
 
   const submit = async (values) => {

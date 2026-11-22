@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/teacher/results")
-@PreAuthorize("hasAnyRole('TEACHER', 'ADMIN')")
+@PreAuthorize("hasAnyRole('TEACHER', 'ADMIN', 'CONTENT_ADMIN')")
 @RequiredArgsConstructor
 public class TeacherResultsController {
     private final TeacherResultsService teacherResultsService;

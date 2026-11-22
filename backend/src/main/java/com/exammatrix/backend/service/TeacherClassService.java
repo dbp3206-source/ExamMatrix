@@ -2,6 +2,7 @@ package com.exammatrix.backend.service;
 
 import com.exammatrix.backend.dto.request.ReviewStudentAssignmentRequest;
 import com.exammatrix.backend.dto.request.UpdateTeacherClassRequest;
+import com.exammatrix.backend.dto.response.BatchApproveStudentsResponse;
 import com.exammatrix.backend.dto.response.PageResponse;
 import com.exammatrix.backend.dto.response.StudentAssignmentResponse;
 import com.exammatrix.backend.dto.response.TeacherClassResponse;
@@ -24,4 +25,6 @@ public interface TeacherClassService {
             UUID assignmentId,
             ReviewStudentAssignmentRequest request
     );
+
+    BatchApproveStudentsResponse approveAllPendingRequests();
 }

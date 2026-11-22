@@ -2,6 +2,7 @@ package com.exammatrix.backend.service.impl;
 
 import com.exammatrix.backend.dto.request.ReviewStudentAssignmentRequest;
 import com.exammatrix.backend.dto.request.UpdateTeacherClassRequest;
+import com.exammatrix.backend.dto.response.BatchApproveStudentsResponse;
 import com.exammatrix.backend.dto.response.PageResponse;
 import com.exammatrix.backend.dto.response.StudentAssignmentResponse;
 import com.exammatrix.backend.dto.response.TeacherClassResponse;
@@ -149,7 +150,7 @@ public class TeacherClassServiceImpl implements TeacherClassService {
         StudentTeacherAssignment assignment = assignmentRepository.findById(assignmentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu"));
 
-        boolean isAdmin = "ADMIN".equalsIgnoreCase(currentUser.getRole().getName());
+        boolean isAdmin = com.exammatrix.backend.security.RolePolicy.isContentStaff(currentUser);
         if (!isAdmin && !assignment.getTeacher().getId().equals(currentUser.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền duyệt yêu cầu của giáo viên khác");
         }
@@ -167,6 +168,28 @@ public class TeacherClassServiceImpl implements TeacherClassService {
 
         StudentTeacherAssignment saved = assignmentRepository.save(assignment);
         return toAssignmentResponse(saved);
+    }
+
+    @Override
+    @Transactional
+    public BatchApproveStudentsResponse approveAllPendingRequests() {
+        User currentUser = currentUserService.getCurrentUser();
+        List<StudentTeacherAssignment> pending = assignmentRepository.findByTeacher_IdAndStatus(
+                currentUser.getId(),
+                StudentAssignmentStatus.PENDING
+        );
+        if (pending.isEmpty()) {
+            return new BatchApproveStudentsResponse(0);
+        }
+        LocalDateTime now = LocalDateTime.now();
+        for (StudentTeacherAssignment assignment : pending) {
+            userRepository.findByIdForUpdate(assignment.getStudent().getId());
+            assignment.setStatus(StudentAssignmentStatus.APPROVED);
+            assignment.setReviewedAt(now);
+            assignment.setReviewedBy(currentUser);
+        }
+        assignmentRepository.saveAll(pending);
+        return new BatchApproveStudentsResponse(pending.size());
     }
 
     private TeacherClassResponse toTeacherClassResponse(TeacherClass teacherClass, User teacher) {

@@ -1064,7 +1064,42 @@ export const mockApi = {
     })
   },
   async getNotificationSummary() {
-    return wait({ role: 'STUDENT', pendingClassRequestCount: 0, unreadFeedbackCount: 0, approvedClasses: [] })
+    return wait({ role: 'STUDENT', pendingClassRequestCount: 0, unreadFeedbackCount: 0, unreadNameWarningCount: 0, approvedClasses: [] })
+  },
+  async refreshSession() {
+    return wait({ accessToken: localStorage.getItem('exam_access_token'), user: JSON.parse(localStorage.getItem('exam_current_user') || 'null') })
+  },
+  async requestStudentOtp(body) {
+    return wait({ email: body?.email || '', expirationMinutes: 5, remainingResends: 3, cooldownSeconds: 60, message: 'Mã OTP mô phỏng đã được gửi.' })
+  },
+  async resendStudentOtp(body) {
+    return wait({ email: body?.email || '', expirationMinutes: 5, remainingResends: 2, cooldownSeconds: 60, message: 'Đã gửi lại mã OTP mô phỏng.' })
+  },
+  async approveAllStudentRequests() {
+    return wait({ approvedCount: 0 })
+  },
+  async getStudentNameWarnings() {
+    return wait([])
+  },
+  async sendStudentNameWarning(studentId, body) {
+    return wait({
+      id: newId(),
+      studentId,
+      studentUsername: '',
+      studentFullName: '',
+      senderId: '',
+      senderName: 'Quản trị viên',
+      reason: body?.reason || '',
+      read: false,
+      createdAt: new Date().toISOString(),
+      emailDelivered: false,
+    })
+  },
+  async getMyNameWarnings() {
+    return wait([])
+  },
+  async markMyNameWarningRead(id) {
+    return wait({ id, read: true })
   },
   async getTeacherResults() {
     return wait({ content: [], page: 0, size: 12, totalElements: 0, totalPages: 0 })

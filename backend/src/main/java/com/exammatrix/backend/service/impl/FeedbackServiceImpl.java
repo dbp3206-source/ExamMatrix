@@ -97,7 +97,7 @@ public class FeedbackServiceImpl implements FeedbackService {
     public FeedbackInboxResponse getInbox() {
         User currentUser = currentUserService.getCurrentUser();
         String role = currentUser.getRole().getName();
-        if ("ADMIN".equalsIgnoreCase(role)) {
+        if (com.exammatrix.backend.security.RolePolicy.isContentStaff(role)) {
             List<StudentFeedback> all = feedbackRepository.findAllByOrderByCreatedAtDesc();
             long unread = all.stream().filter(f -> !f.isReadByAdmin()).count();
             List<StudentFeedbackResponse> items = all.stream()
@@ -122,7 +122,7 @@ public class FeedbackServiceImpl implements FeedbackService {
     public StudentFeedbackResponse markAsRead(UUID feedbackId) {
         User currentUser = currentUserService.getCurrentUser();
         String role = currentUser.getRole().getName();
-        if ("ADMIN".equalsIgnoreCase(role)) {
+        if (com.exammatrix.backend.security.RolePolicy.isContentStaff(role)) {
             StudentFeedback feedback = feedbackRepository.findById(feedbackId)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy góp ý"));
             if (!feedback.isReadByAdmin()) {

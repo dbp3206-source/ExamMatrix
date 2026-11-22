@@ -31,7 +31,7 @@ import {
 } from 'lucide-react'
 import { api } from '@/api/service'
 import { useAuth } from '@/auth/AuthContext'
-import { attemptStatusMeta } from '@/constants'
+import { attemptStatusMeta, isContentAdminRole } from '@/constants'
 import { formatDateTime } from '@/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -407,7 +407,7 @@ function AdminDashboardWorkspace({ analytics, weekStart, setWeekStart, onRefresh
               <p className="mt-0.5 text-xs text-slate-500">
                 {boardRole === 'TEACHER'
                   ? 'Ưu tiên bài chấm hoàn tất, tiếp theo là lô phát hành đề'
-                  : 'Tỷ lệ điểm cao (≥ 8/10) và số bài đạt'}
+                  : 'Xếp hạng theo điểm bài thi cao nhất (thang điểm 10)'}
               </p>
             </div>
             <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1">
@@ -473,7 +473,7 @@ function AdminDashboardWorkspace({ analytics, weekStart, setWeekStart, onRefresh
                       <div className="min-w-0">
                         <div className="truncate text-sm font-semibold text-slate-900">{item.fullName}</div>
                         <div className="text-xs text-slate-500 tabular-nums">
-                          <strong className="text-teal-700">{Number(item.highScoreRate).toFixed(1)}%</strong> điểm cao · {fmt(item.highScoreCount)}/{fmt(item.totalAttempts)} bài
+                          <strong className="text-teal-700">{fmtTen(item.highestScore)}</strong> cao nhất · {fmt(item.totalAttempts)} bài
                         </div>
                       </div>
                     </div>
@@ -1129,7 +1129,7 @@ export default function DashboardWorkspace() {
   const [daysFilter, setDaysFilter] = useState(null)
 
   const queryParams = useMemo(() => {
-    if (role === 'ADMIN') return { weekStart }
+    if (isContentAdminRole(role)) return { weekStart }
     if (role === 'TEACHER') return { subjectId: selectedSubjectId, days: daysFilter }
     return {}
   }, [role, weekStart, selectedSubjectId, daysFilter])
@@ -1159,7 +1159,7 @@ export default function DashboardWorkspace() {
 
   const analytics = analyticsQuery.data
 
-  if (role === 'ADMIN') {
+  if (isContentAdminRole(role)) {
     return (
       <AdminDashboardWorkspace
         analytics={analytics}

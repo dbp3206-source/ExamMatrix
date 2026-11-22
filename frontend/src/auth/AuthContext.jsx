@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/service'
 import { disableGoogleAutoSelect } from '../utils/googleIdentity'
@@ -7,10 +7,30 @@ import { clearAllEssayDrafts } from '../utils/essayDraftStorage'
 const AuthContext = createContext(null)
 const TOKEN_KEY = 'exam_access_token'
 const USER_KEY = 'exam_current_user'
+const REFRESH_BEFORE_EXPIRY_MS = 25 * 60 * 1000
+const ACTIVE_IDLE_LIMIT_MS = 45 * 60 * 1000
+const REFRESH_CHECK_INTERVAL_MS = 60 * 1000
+
+function parseJwtExpMs(token) {
+  if (!token || typeof token !== 'string') return null
+  const parts = token.split('.')
+  if (parts.length < 2) return null
+  try {
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4)
+    const payload = JSON.parse(atob(padded))
+    return typeof payload?.exp === 'number' ? payload.exp * 1000 : null
+  } catch {
+    return null
+  }
+}
 
 export function AuthProvider({ children }) {
   const queryClient = useQueryClient()
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY))
+  const lastActivityRef = useRef(Date.now())
+  const refreshingRef = useRef(false)
+
   const session = useQuery({
     queryKey: ['session', token],
     queryFn: api.me,
@@ -28,8 +48,8 @@ export function AuthProvider({ children }) {
   const clearSessionOnly = useCallback(async () => {
     await queryClient.cancelQueries()
     clearAllEssayDrafts()
-    localStorage.removeItem('exam_access_token')
-    localStorage.removeItem('exam_current_user')
+    localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(USER_KEY)
     setToken(null)
     queryClient.clear()
   }, [queryClient])
@@ -61,9 +81,55 @@ export function AuthProvider({ children }) {
     localStorage.setItem(TOKEN_KEY, result.accessToken)
     localStorage.setItem(USER_KEY, JSON.stringify(result.user))
     queryClient.setQueryData(['session', result.accessToken], result.user)
+    lastActivityRef.current = Date.now()
     setToken(result.accessToken)
     return result.user
   }, [queryClient])
+
+  useEffect(() => {
+    if (!token || !user) return undefined
+
+    const markActive = () => {
+      lastActivityRef.current = Date.now()
+    }
+    window.addEventListener('pointerdown', markActive, { passive: true })
+    window.addEventListener('keydown', markActive, { passive: true })
+    window.addEventListener('scroll', markActive, { passive: true })
+    window.addEventListener('focus', markActive)
+
+    const maybeRefresh = async () => {
+      if (refreshingRef.current) return
+      const expMs = parseJwtExpMs(token)
+      if (!expMs) return
+      const now = Date.now()
+      const timeLeft = expMs - now
+      const recentlyActive = now - lastActivityRef.current <= ACTIVE_IDLE_LIMIT_MS
+      if (timeLeft > 0 && timeLeft <= REFRESH_BEFORE_EXPIRY_MS && recentlyActive) {
+        refreshingRef.current = true
+        try {
+          const next = await api.refreshSession()
+          if (next?.accessToken && next?.user) {
+            localStorage.setItem(TOKEN_KEY, next.accessToken)
+            localStorage.setItem(USER_KEY, JSON.stringify(next.user))
+            queryClient.setQueryData(['session', next.accessToken], next.user)
+            setToken(next.accessToken)
+          }
+        } catch {
+        } finally {
+          refreshingRef.current = false
+        }
+      }
+    }
+
+    const timer = window.setInterval(maybeRefresh, REFRESH_CHECK_INTERVAL_MS)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('pointerdown', markActive)
+      window.removeEventListener('keydown', markActive)
+      window.removeEventListener('scroll', markActive)
+      window.removeEventListener('focus', markActive)
+    }
+  }, [token, user, queryClient])
 
   const login = useCallback(async (credentials) => {
     const result = await api.login(credentials)

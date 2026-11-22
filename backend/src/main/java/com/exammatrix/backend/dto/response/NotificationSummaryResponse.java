@@ -8,8 +8,18 @@ public record NotificationSummaryResponse(
         String role,
         long pendingClassRequestCount,
         long unreadFeedbackCount,
+        long unreadNameWarningCount,
         List<ApprovedClassNotification> approvedClasses
 ) {
+    public NotificationSummaryResponse(
+            String role,
+            long pendingClassRequestCount,
+            long unreadFeedbackCount,
+            List<ApprovedClassNotification> approvedClasses
+    ) {
+        this(role, pendingClassRequestCount, unreadFeedbackCount, 0L, approvedClasses);
+    }
+
     public record ApprovedClassNotification(
             UUID assignmentId,
             String className,

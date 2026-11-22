@@ -20,7 +20,7 @@ import {
   X,
 } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
-import { roleLabel } from '@/constants'
+import { isAnyAdminRole, isContentAdminRole, isUserManagerRole, roleLabel } from '@/constants'
 import { Button } from '@/components/ui/button'
 import {
   Breadcrumb,
@@ -35,10 +35,15 @@ import { cn } from '@/lib/utils'
 const AssistantWidget = lazy(() => import('@/components/common/AssistantWidget'))
 
 function buildBreadcrumbs(pathname, role) {
-  const homePath = role === 'STUDENT' ? '/hoc-sinh/tong-quan' : '/'
-  const homeLabel = 'Tổng quan'
+  const homePath =
+    role === 'STUDENT'
+      ? '/hoc-sinh/tong-quan'
+      : role === 'USER_ADMIN'
+        ? '/nguoi-dung'
+        : '/'
+  const homeLabel = role === 'USER_ADMIN' ? 'Quản lý người dùng' : 'Tổng quan'
 
-  if (pathname === '/' || pathname === '/hoc-sinh/tong-quan') {
+  if (pathname === '/' || pathname === '/hoc-sinh/tong-quan' || (role === 'USER_ADMIN' && pathname === '/nguoi-dung')) {
     return [{ label: homeLabel }]
   }
 
@@ -114,13 +119,19 @@ export default function MainLayout() {
         { to: '/ho-so', label: 'Hồ sơ cá nhân', icon: UserCircle },
       ]
     }
+    if (role === 'USER_ADMIN') {
+      return [
+        { to: '/nguoi-dung', label: 'Quản lý người dùng', icon: Users },
+        { to: '/ho-so', label: 'Hồ sơ cá nhân', icon: UserCircle },
+      ]
+    }
     const items = [
       { to: '/', label: 'Tổng quan', icon: LayoutDashboard },
       { to: '/mon-hoc', label: 'Môn học', icon: BookOpen },
       { to: '/chuong', label: 'Chương bài', icon: Layers },
       { to: '/cau-hoi', label: 'Ngân hàng câu hỏi', icon: Database },
       { to: '/ma-tran', label: 'Ma trận đề', icon: Grid3X3 },
-      { to: '/de-thi', label: 'Đề thi & In ấn', icon: FileSpreadsheet },
+      { to: '/de-thi', label: 'In ấn', icon: FileSpreadsheet },
     ]
     if (role === 'TEACHER') {
       items.push({ to: '/giao-vien/duyet-hoc-sinh', label: 'Duyệt học sinh', icon: UserCheck })
@@ -129,9 +140,11 @@ export default function MainLayout() {
     if (role === 'TEACHER') {
       items.push({ to: '/giao-vien/ket-qua', label: 'Theo dõi Kết quả', icon: FileBarChart2 })
     }
-    if (role === 'ADMIN') {
+    if (isContentAdminRole(role)) {
       items.push({ to: '/ket-qua', label: 'Kết quả', icon: FileBarChart2 })
-      items.push({ to: '/nguoi-dung', label: 'Người dùng', icon: Users })
+    }
+    if (isUserManagerRole(role)) {
+      items.push({ to: '/nguoi-dung', label: 'Quản lý người dùng', icon: Users })
     }
     items.push({ to: '/ho-so', label: 'Hồ sơ cá nhân', icon: UserCircle })
     return items
@@ -156,7 +169,10 @@ export default function MainLayout() {
         )}
       >
         <div className="flex items-center justify-between gap-3 border-b border-slate-800/80 px-5 py-4">
-          <Link to={role === 'STUDENT' ? '/hoc-sinh/tong-quan' : '/'} className="flex items-center gap-3 min-w-0">
+          <Link
+            to={role === 'STUDENT' ? '/hoc-sinh/tong-quan' : role === 'USER_ADMIN' ? '/nguoi-dung' : '/'}
+            className="flex items-center gap-3 min-w-0"
+          >
             <div className="grid h-9 w-9 shrink-0 grid-cols-2 gap-1 rounded-lg bg-indigo-600 p-2 shadow-xs">
               <span className="rounded-[2px] bg-white" />
               <span className="rounded-[2px] bg-indigo-200" />
@@ -168,7 +184,7 @@ export default function MainLayout() {
               <div className="truncate text-[11px] font-medium text-slate-400">
                 {role === 'STUDENT'
                   ? 'Cổng Luyện Thi'
-                  : role === 'ADMIN'
+                  : isAnyAdminRole(role)
                     ? 'Quản Trị Hệ Thống'
                     : 'Không Gian Giảng Dạy'}
               </div>

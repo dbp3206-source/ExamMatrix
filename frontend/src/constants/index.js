@@ -59,8 +59,18 @@ export const typeLabel = (value) => QUESTION_TYPES.find((item) => item.value ===
 export const typeShortLabel = (value) => QUESTION_TYPES.find((item) => item.value === value)?.shortLabel || value
 export const examTypeLabel = (value) => EXAM_TYPES.find((item) => item.value === (value || 'OBJECTIVE'))?.label || value
 
+export const ADMIN_ROLES = ['ADMIN', 'CONTENT_ADMIN', 'USER_ADMIN']
+export const CONTENT_ADMIN_ROLES = ['ADMIN', 'CONTENT_ADMIN']
+export const USER_MANAGER_ROLES = ['ADMIN', 'USER_ADMIN']
+
+export const isAnyAdminRole = (role) => ADMIN_ROLES.includes(role)
+export const isContentAdminRole = (role) => CONTENT_ADMIN_ROLES.includes(role)
+export const isUserManagerRole = (role) => USER_MANAGER_ROLES.includes(role)
+
 export const roleLabel = (value) => {
-  if (value === 'ADMIN') return 'Quản trị viên'
+  if (value === 'ADMIN') return 'Admin tổng'
+  if (value === 'CONTENT_ADMIN') return 'Admin nội dung'
+  if (value === 'USER_ADMIN') return 'Admin người dùng'
   if (value === 'STUDENT') return 'Học sinh'
   return 'Giáo viên bộ môn'
 }

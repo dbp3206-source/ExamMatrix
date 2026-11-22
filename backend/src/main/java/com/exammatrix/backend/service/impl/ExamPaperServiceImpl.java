@@ -194,7 +194,7 @@ public class ExamPaperServiceImpl implements ExamPaperService {
     }
 
     private boolean isAdmin(User user) {
-        return "ADMIN".equalsIgnoreCase(user.getRole().getName());
+        return com.exammatrix.backend.security.RolePolicy.isContentStaff(user);
     }
 
     private ExamPaperDetailResponse convertToResponse(ExamPaper paper) {

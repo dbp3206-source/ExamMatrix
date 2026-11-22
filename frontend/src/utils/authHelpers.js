@@ -3,6 +3,8 @@ const PUBLIC_AUTH_PATHS = new Set([
   '/auth/google/student/challenge',
   '/auth/google/student',
   '/auth/register/student',
+  '/auth/register/student/request-otp',
+  '/auth/register/student/resend-otp',
 ])
 
 export function normalizeAuthPath(url) {
@@ -19,6 +21,18 @@ export function resolvePostLoginTarget(role, fromPath) {
       return fromPath
     }
     return '/hoc-sinh/tong-quan'
+  }
+  if (role === 'USER_ADMIN') {
+    if (fromPath === '/nguoi-dung' || fromPath === '/ho-so') {
+      return fromPath
+    }
+    return '/nguoi-dung'
+  }
+  if (role === 'CONTENT_ADMIN') {
+    if (fromPath && fromPath !== '/dang-nhap' && fromPath !== '/nguoi-dung' && !fromPath.startsWith('/hoc-sinh/')) {
+      return fromPath
+    }
+    return '/'
   }
   if (fromPath && fromPath !== '/dang-nhap' && !fromPath.startsWith('/hoc-sinh/')) {
     return fromPath

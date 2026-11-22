@@ -25,4 +25,6 @@ public class CreateUserRequest {
     @Size(min = 8, message = "Mật khẩu phải có ít nhất 8 ký tự")
     @BcryptPasswordLength
     private String password;
+
+    private String role;
 }

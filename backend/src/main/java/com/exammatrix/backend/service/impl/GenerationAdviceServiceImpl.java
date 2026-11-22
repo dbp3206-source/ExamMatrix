@@ -681,7 +681,7 @@ public class GenerationAdviceServiceImpl implements GenerationAdviceService {
     }
 
     private void checkCanAccess(ExamMatrix matrix, User currentUser) {
-        if ("ADMIN".equalsIgnoreCase(currentUser.getRole().getName())) {
+        if (com.exammatrix.backend.security.RolePolicy.isContentStaff(currentUser)) {
             return;
         }
         boolean isOwner = "TEACHER".equalsIgnoreCase(currentUser.getRole().getName())

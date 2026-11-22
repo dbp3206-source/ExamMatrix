@@ -2,6 +2,7 @@ package com.exammatrix.backend.controller;
 
 import com.exammatrix.backend.dto.request.ReviewStudentAssignmentRequest;
 import com.exammatrix.backend.dto.request.UpdateTeacherClassRequest;
+import com.exammatrix.backend.dto.response.BatchApproveStudentsResponse;
 import com.exammatrix.backend.dto.response.PageResponse;
 import com.exammatrix.backend.dto.response.StudentAssignmentResponse;
 import com.exammatrix.backend.dto.response.TeacherClassResponse;
@@ -42,6 +43,11 @@ public class TeacherClassController {
     ) {
         Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, Math.min(size, 100)));
         return ResponseEntity.ok(teacherClassService.getTeacherStudents(status, pageable));
+    }
+
+    @PatchMapping({"/classes/students/approve-all", "/student-requests/approve-all"})
+    public ResponseEntity<BatchApproveStudentsResponse> approveAllStudents() {
+        return ResponseEntity.ok(teacherClassService.approveAllPendingRequests());
     }
 
     @PatchMapping({"/classes/students/{id}", "/student-requests/{id}"})

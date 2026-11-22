@@ -67,6 +67,7 @@ class AssessmentIntegrityIntegrationTest {
     @Autowired private StudentTeacherAssignmentRepository assignmentRepository;
     @Autowired private StudentExamAttemptRepository attemptRepository;
     @Autowired private StudentAttemptAnswerRepository attemptAnswerRepository;
+    @Autowired private StudentRegistrationOtpRepository otpRepository;
 
     @Autowired private StudentExamService studentExamService;
     @Autowired private TeacherGradingService teacherGradingService;
@@ -102,6 +103,7 @@ class AssessmentIntegrityIntegrationTest {
                 .addFilters(springSecurityFilterChain)
                 .build();
 
+        otpRepository.deleteAll();
         attemptAnswerRepository.deleteAll();
         attemptRepository.deleteAll();
         assignmentRepository.deleteAll();
@@ -347,9 +349,17 @@ class AssessmentIntegrityIntegrationTest {
 
     @Test
     void bcryptPasswordChangesValidateTheUtf8ByteLength() throws Exception {
+        otpRepository.save(StudentRegistrationOtp.builder()
+                .email("qa_utf8@example.com")
+                .otpHash(passwordEncoder.encode("123456"))
+                .expiresAt(java.time.LocalDateTime.now().plusMinutes(5))
+                .attempts(0)
+                .resendCount(0)
+                .lastSentAt(java.time.LocalDateTime.now())
+                .build());
         String tooLong = "ấ".repeat(25);
         String registration = """
-                {"username":"qa_utf8","email":"qa_utf8@example.com","fullName":"QA UTF8","password":"%s"}
+                {"username":"qa_utf8","email":"qa_utf8@example.com","fullName":"QA UTF8","password":"%s","otp":"123456"}
                 """;
         mockMvc.perform(post("/auth/register/student").contentType("application/json")
                         .content(registration.formatted(tooLong)))

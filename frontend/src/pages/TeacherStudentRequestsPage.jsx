@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Copy, Lock, Settings2, ShieldBan, UserCheck, Users, X } from 'lucide-react'
+import { Check, CheckCheck, Copy, Lock, Settings2, ShieldBan, UserCheck, Users, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/service'
 import { requestStatusMeta } from '@/constants'
@@ -117,6 +117,31 @@ export default function TeacherStudentRequestsPage() {
         page,
         size,
       }),
+  })
+
+  const {
+    data: pendingSummary,
+  } = useQuery({
+    queryKey: ['teacher', 'student-requests', 'pending-count'],
+    queryFn: () =>
+      api.getTeacherStudentRequests({
+        status: 'PENDING',
+        page: 0,
+        size: 1,
+      }),
+  })
+  const pendingCount = Number(pendingSummary?.totalElements || 0)
+
+  const approveAllMutation = useMutation({
+    mutationFn: () => api.approveAllStudentRequests(),
+    onSuccess: (res) => {
+      const count = Number(res?.approvedCount || 0)
+      toast.success(count > 0 ? `Đã chấp nhận tất cả ${count} học sinh vào lớp` : 'Không có yêu cầu chờ duyệt')
+      queryClient.invalidateQueries({ queryKey: ['teacher', 'student-requests'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'summary'] })
+      refetchClass()
+    },
+    onError: (err) => toast.error(err.message || 'Không thể duyệt hàng loạt'),
   })
 
   const lastRequestPage = requestsData == null ? null : Math.max(0, requestsData.totalPages - 1)
@@ -339,21 +364,34 @@ export default function TeacherStudentRequestsPage() {
         </CardContent>
       </Card>
 
-      <Tabs
-        value={statusFilter || 'ALL'}
-        onValueChange={(val) => {
-          setStatusFilter(val === 'ALL' ? '' : val)
-          setPage(0)
-        }}
-      >
-        <TabsList>
-          <TabsTrigger value="ALL">Tất cả</TabsTrigger>
-          <TabsTrigger value="APPROVED">Đã duyệt</TabsTrigger>
-          <TabsTrigger value="PENDING">Chờ duyệt</TabsTrigger>
-          <TabsTrigger value="REJECTED">Đã từ chối</TabsTrigger>
-          <TabsTrigger value="REVOKED">Đã thu hồi</TabsTrigger>
-        </TabsList>
-      </Tabs>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Tabs
+          value={statusFilter || 'ALL'}
+          onValueChange={(val) => {
+            setStatusFilter(val === 'ALL' ? '' : val)
+            setPage(0)
+          }}
+        >
+          <TabsList>
+            <TabsTrigger value="ALL">Tất cả</TabsTrigger>
+            <TabsTrigger value="APPROVED">Đã duyệt</TabsTrigger>
+            <TabsTrigger value="PENDING">Chờ duyệt{pendingCount > 0 ? ` (${pendingCount})` : ''}</TabsTrigger>
+            <TabsTrigger value="REJECTED">Đã từ chối</TabsTrigger>
+            <TabsTrigger value="REVOKED">Đã thu hồi</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        {pendingCount > 0 && (
+          <Button
+            size="sm"
+            variant="teal"
+            disabled={approveAllMutation.isPending}
+            onClick={() => approveAllMutation.mutate()}
+          >
+            <CheckCheck className="h-4 w-4" />
+            {approveAllMutation.isPending ? 'Đang duyệt...' : `Chấp nhận tất cả (${pendingCount})`}
+          </Button>
+        )}
+      </div>
 
       {isLoading || (lastRequestPage != null && page > lastRequestPage) ? (
         <LoadingState label="Đang tải danh sách học sinh..." />

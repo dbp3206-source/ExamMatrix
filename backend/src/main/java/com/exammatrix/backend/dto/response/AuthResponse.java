@@ -5,11 +5,20 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.Instant;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class AuthResponse {
-    String accessToken;
-    UserResponse user;
+    private String accessToken;
+    private Instant expiresAt;
+    private long expiresInSeconds;
+    private UserResponse user;
+
+    public AuthResponse(String accessToken, UserResponse user) {
+        this.accessToken = accessToken;
+        this.user = user;
+    }
 }

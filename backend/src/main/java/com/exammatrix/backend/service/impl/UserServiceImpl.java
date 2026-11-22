@@ -10,6 +10,7 @@ import com.exammatrix.backend.entity.User;
 import com.exammatrix.backend.entity.enums.UserStatus;
 import com.exammatrix.backend.repository.RoleRepository;
 import com.exammatrix.backend.repository.UserRepository;
+import com.exammatrix.backend.security.RolePolicy;
 import com.exammatrix.backend.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -17,9 +18,12 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
@@ -121,7 +125,18 @@ public class UserServiceImpl implements UserService {
             );
         }
 
-        Role teacherRole = findRoleByName("TEACHER");
+        String targetRoleName = StringUtils.hasText(request.getRole())
+                ? RolePolicy.normalize(request.getRole())
+                : RolePolicy.TEACHER;
+
+        if (RolePolicy.isSuperAdmin(targetRoleName) && isCallerRestrictedToUserAdmin()) {
+            throw new ResponseStatusException(
+                HttpStatus.FORBIDDEN,
+                "Bạn không có quyền tạo tài khoản Admin tổng"
+            );
+        }
+
+        Role assignedRole = findRoleByName(targetRoleName);
 
         User user = new User();
 
@@ -129,7 +144,7 @@ public class UserServiceImpl implements UserService {
         user.setEmail(email);
         user.setFullName(request.getFullName().trim());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setRole(teacherRole);
+        user.setRole(assignedRole);
         user.setStatus(UserStatus.ACTIVE);
 
         User savedUser = userRepository.save(user);
@@ -141,6 +156,7 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public UserResponse updateUserById(UUID id, UpdateUserRequest request) {
         User user = findUserForUpdate(id);
+        enforceTargetEditableByCaller(user);
 
         String email = request
             .getEmail()
@@ -161,7 +177,14 @@ public class UserServiceImpl implements UserService {
         user.setEmail(email);
 
         if (request.getRole() != null && !request.getRole().isBlank()) {
-            Role role = findRoleByName(request.getRole());
+            String normalizedTargetRole = RolePolicy.normalize(request.getRole());
+            if (RolePolicy.isSuperAdmin(normalizedTargetRole) && isCallerRestrictedToUserAdmin()) {
+                throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Bạn không có quyền gán vai trò Admin tổng"
+                );
+            }
+            Role role = findRoleByName(normalizedTargetRole);
             if (!role.getId().equals(user.getRole().getId())) {
                 if (user.getGoogleSubject() != null) {
                     throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -181,6 +204,7 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public UserResponse updateUserStatus(UUID id, UpdateUserStatusRequest request) {
         User user = findUserForUpdate(id);
+        enforceTargetEditableByCaller(user);
 
         if (user.getStatus() != request.getStatus()) {
             user.setStatus(request.getStatus());
@@ -253,5 +277,26 @@ public class UserServiceImpl implements UserService {
         }
 
         return normalized;
+    }
+
+    private void enforceTargetEditableByCaller(User target) {
+        if (RolePolicy.isSuperAdmin(target) && isCallerRestrictedToUserAdmin()) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Bạn không có quyền chỉnh sửa tài khoản Admin tổng"
+            );
+        }
+    }
+
+    private boolean isCallerRestrictedToUserAdmin() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            return false;
+        }
+        boolean hasUserAdmin = auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_USER_ADMIN".equalsIgnoreCase(a.getAuthority()));
+        boolean hasSuperAdmin = auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equalsIgnoreCase(a.getAuthority()));
+        return hasUserAdmin && !hasSuperAdmin;
     }
 }

@@ -348,7 +348,7 @@ public class StudentExamServiceImpl implements StudentExamService {
 
         boolean isStudent = "STUDENT".equalsIgnoreCase(currentUser.getRole().getName());
         boolean isOwnerTeacher = attempt.getTeacher().getId().equals(currentUser.getId());
-        boolean isAdmin = "ADMIN".equalsIgnoreCase(currentUser.getRole().getName());
+        boolean isAdmin = com.exammatrix.backend.security.RolePolicy.isContentStaff(currentUser);
 
         if (isStudent && !attempt.getStudent().getId().equals(currentUser.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền xem kết quả của sinh viên khác");

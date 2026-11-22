@@ -57,4 +57,12 @@ public class JwtService {
             .encode(parameters)
             .getTokenValue();
     }
+
+    public Instant computeExpiresAt() {
+        return Instant.now().plus(expirationMinutes, ChronoUnit.MINUTES);
+    }
+
+    public long getExpirationSeconds() {
+        return expirationMinutes * 60L;
+    }
 }

@@ -401,7 +401,7 @@ public class QuestionServiceImpl implements QuestionService {
                 .getRole()
                 .getName();
 
-        boolean isAdmin = "ADMIN".equalsIgnoreCase(roleName);
+        boolean isAdmin = com.exammatrix.backend.security.RolePolicy.isContentStaff(roleName);
 
         boolean isTeacherOwner = "TEACHER".equalsIgnoreCase(roleName)
                     && question.getTeacher()

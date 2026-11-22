@@ -373,7 +373,7 @@ public class ExamGenerationServiceImpl implements ExamGenerationService {
     }
 
     private boolean isAdmin(User user) {
-        return "ADMIN".equalsIgnoreCase(user.getRole().getName());
+        return com.exammatrix.backend.security.RolePolicy.isContentStaff(user);
     }
 
     private ExamPaperDetailResponse convertToResponse(ExamPaper paper) {

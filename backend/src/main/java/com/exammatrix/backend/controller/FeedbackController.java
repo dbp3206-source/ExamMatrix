@@ -35,13 +35,13 @@ public class FeedbackController {
     }
 
     @GetMapping("/feedbacks/inbox")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CONTENT_ADMIN', 'TEACHER')")
     public ResponseEntity<FeedbackInboxResponse> getInbox() {
         return ResponseEntity.ok(feedbackService.getInbox());
     }
 
     @PatchMapping("/feedbacks/{id}/read")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CONTENT_ADMIN', 'TEACHER')")
     public ResponseEntity<StudentFeedbackResponse> markAsRead(@PathVariable UUID id) {
         return ResponseEntity.ok(feedbackService.markAsRead(id));
     }

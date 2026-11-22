@@ -9,6 +9,8 @@ import com.exammatrix.backend.dto.response.UserResponse;
 public interface AuthService {
     AuthResponse login(LoginRequest request);
 
+    AuthResponse refreshSession();
+
     UserResponse getCurrentUser();
 
     UserResponse updateProfile(UpdateProfileRequest request);

@@ -62,6 +62,12 @@ public interface StudentTeacherAssignmentRepository extends JpaRepository<Studen
             Pageable pageable
     );
 
+    @EntityGraph(attributePaths = {"student", "teacherClass"})
+    java.util.List<StudentTeacherAssignment> findByTeacher_IdAndStatus(
+            UUID teacherId,
+            StudentAssignmentStatus status
+    );
+
     boolean existsByStudent_IdAndTeacher_IdAndStatus(
             UUID studentId,
             UUID teacherId,

@@ -102,6 +102,7 @@ public class DashboardAnalyticsResponse {
             long totalAttempts,
             long highScoreCount,
             BigDecimal highScoreRate,
+            BigDecimal highestScore,
             Integer previousRank,
             Integer rankDelta,
             boolean isNew,

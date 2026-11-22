@@ -32,4 +32,8 @@ public class StudentRegisterRequest {
     @NotBlank(message = "Họ tên không được để trống")
     @Size(max = 100, message = "Họ tên không được vượt quá 100 ký tự")
     private String fullName;
+
+    @NotBlank(message = "Mã OTP không được để trống")
+    @Pattern(regexp = "^\\d{6}$", message = "Mã OTP phải gồm đúng 6 chữ số")
+    private String otp;
 }

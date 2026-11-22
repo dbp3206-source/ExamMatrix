@@ -327,7 +327,7 @@ public class ExamMatrixServiceImpl implements ExamMatrixService {
     }
 
     private boolean isAdmin(User user) {
-        return "ADMIN".equalsIgnoreCase(user.getRole().getName());
+        return com.exammatrix.backend.security.RolePolicy.isContentStaff(user);
     }
 
     private ExamMatrix findExamMatrixById(UUID id) {

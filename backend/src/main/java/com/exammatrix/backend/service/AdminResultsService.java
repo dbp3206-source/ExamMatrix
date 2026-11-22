@@ -38,7 +38,10 @@ public class AdminResultsService {
 
     public List<UserResponse> listUsersByRole(String role, String search) {
         String normalizedRole = (role == null || role.isBlank()) ? "TEACHER" : role.trim().toUpperCase(Locale.ROOT);
-        if (!"TEACHER".equals(normalizedRole) && !"STUDENT".equals(normalizedRole) && !"ADMIN".equals(normalizedRole)) {
+        if (!"TEACHER".equals(normalizedRole)
+                && !"STUDENT".equals(normalizedRole)
+                && !"ADMIN".equals(normalizedRole)
+                && !"CONTENT_ADMIN".equals(normalizedRole)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vai trò không hợp lệ");
         }
         String q = search == null ? "" : search.trim().toLowerCase(Locale.ROOT);

@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { Mascot } from 'page-mascot'
+import { toast } from 'sonner'
 import {
   ArrowRight,
   Bell,
   BookOpenCheck,
+  CheckCheck,
   CheckCircle2,
   CircleHelp,
   ClipboardCheck,
@@ -22,7 +24,7 @@ import {
 } from 'lucide-react'
 import { api } from '@/api/service'
 import { useAuth } from '@/auth/AuthContext'
-import { roleLabel } from '@/constants'
+import { isContentAdminRole, roleLabel } from '@/constants'
 import { cn } from '@/lib/utils'
 
 const POSITION_STORAGE_KEY = 'exam_assistant_position_v1'
@@ -126,6 +128,15 @@ const linksByRole = {
     { to: '/nguoi-dung', label: 'Quản lý tài khoản', icon: Users },
     { to: '/cau-hoi', label: 'Ngân hàng câu hỏi', icon: BookOpenCheck },
   ],
+  CONTENT_ADMIN: [
+    { to: '/?inbox=1', label: 'Hòm thư góp ý', icon: Inbox },
+    { to: '/cau-hoi', label: 'Ngân hàng câu hỏi', icon: BookOpenCheck },
+    { to: '/ket-qua', label: 'Kết quả hệ thống', icon: ClipboardCheck },
+  ],
+  USER_ADMIN: [
+    { to: '/nguoi-dung', label: 'Quản lý người dùng', icon: Users },
+    { to: '/ho-so', label: 'Hồ sơ cá nhân', icon: UserCheck },
+  ],
   TEACHER: [
     { to: '/giao-vien/duyet-hoc-sinh', label: 'Duyệt học sinh vào lớp', icon: UserCheck },
     { to: '/?inbox=1', label: 'Hòm thư góp ý', icon: Inbox },
@@ -180,12 +191,16 @@ const hintStyles = {
 
 export default function AssistantWidget() {
   const { user } = useAuth()
+  const queryClient = useQueryClient()
   const location = useLocation()
   const reduceMotion = useReducedMotion()
   const role = user?.role || 'TEACHER'
+  const canPollNotifications =
+    role === 'TEACHER' || role === 'STUDENT' || isContentAdminRole(role)
   const isQuietRoute =
     location.pathname.startsWith('/hoc-sinh/lam-bai/') ||
-    location.pathname.startsWith('/giao-vien/cham-thi')
+    location.pathname.startsWith('/giao-vien/cham-thi') ||
+    role === 'USER_ADMIN'
   const [open, setOpen] = useState(false)
   const [hint, setHint] = useState(null)
   const [position, setPosition] = useState(loadSavedPosition)
@@ -219,7 +234,7 @@ export default function AssistantWidget() {
   const notificationQuery = useQuery({
     queryKey: ['notifications', 'summary', user?.id],
     queryFn: () => api.getNotificationSummary(),
-    enabled: Boolean(user?.id) && !isQuietRoute,
+    enabled: Boolean(user?.id) && canPollNotifications && !isQuietRoute,
     refetchOnMount: 'always',
     refetchOnWindowFocus: true,
     refetchInterval: 15_000,
@@ -227,9 +242,22 @@ export default function AssistantWidget() {
     staleTime: 0,
   })
 
+  const approveAllMutation = useMutation({
+    mutationFn: () => api.approveAllStudentRequests(),
+    onSuccess: (res) => {
+      const count = Number(res?.approvedCount || 0)
+      toast.success(count > 0 ? `Đã chấp nhận tất cả ${count} học sinh vào lớp` : 'Không có yêu cầu chờ duyệt')
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'summary'] })
+      queryClient.invalidateQueries({ queryKey: ['teacher', 'student-requests'] })
+      queryClient.invalidateQueries({ queryKey: ['teacher', 'class'] })
+    },
+    onError: (err) => toast.error(err?.message || 'Không thể duyệt hàng loạt'),
+  })
+
   const summary = notificationQuery.data
   const pendingClassRequestCount = Number(summary?.pendingClassRequestCount || 0)
   const unreadFeedbackCount = Number(summary?.unreadFeedbackCount || 0)
+  const unreadNameWarningCount = Number(summary?.unreadNameWarningCount || 0)
   const approvedClasses = useMemo(() => summary?.approvedClasses || [], [summary])
 
   const unseenApprovedClasses = useMemo(() => {
@@ -248,7 +276,10 @@ export default function AssistantWidget() {
   const activeNotification = useMemo(() => {
     if (role === 'TEACHER') {
       if (pendingClassRequestCount > 0) {
-        const actions = [{ to: '/giao-vien/duyet-hoc-sinh', label: 'Xem yêu cầu →' }]
+        const actions = [
+          { id: 'approve-all', type: 'approveAll', label: 'Chấp nhận tất cả' },
+          { to: '/giao-vien/duyet-hoc-sinh', label: 'Xem yêu cầu →' },
+        ]
         if (unreadFeedbackCount > 0) {
           actions.push({ to: '/?inbox=1', label: 'Mở hòm thư →' })
         }
@@ -276,6 +307,19 @@ export default function AssistantWidget() {
       return null
     }
 
+    if (role === 'STUDENT' && unreadNameWarningCount > 0) {
+      return {
+        key: `student-name-warning-${unreadNameWarningCount}`,
+        tone: 'warning',
+        title: 'Cảnh báo đổi tên tài khoản',
+        message: `Bạn có ${unreadNameWarningCount} cảnh báo từ quản trị viên yêu cầu cập nhật tên hiển thị.`,
+        secondaryNote: 'Việc đổi tên vẫn giữ nguyên toàn bộ kết quả thi và dữ liệu lớp học của bạn.',
+        actions: [
+          { to: '/ho-so', label: 'Đổi tên ngay →' },
+        ],
+      }
+    }
+
     if (role === 'STUDENT' && unseenApprovedClasses.length > 0) {
       const first = unseenApprovedClasses[0]
       const message =
@@ -295,7 +339,7 @@ export default function AssistantWidget() {
       }
     }
 
-    if (role === 'ADMIN' && unreadFeedbackCount > 0) {
+    if (isContentAdminRole(role) && unreadFeedbackCount > 0) {
       return {
         key: `admin-feedback-${unreadFeedbackCount}`,
         tone: 'info',
@@ -309,14 +353,14 @@ export default function AssistantWidget() {
     }
 
     return null
-  }, [role, pendingClassRequestCount, unreadFeedbackCount, unseenApprovedClasses])
+  }, [role, pendingClassRequestCount, unreadFeedbackCount, unreadNameWarningCount, unseenApprovedClasses])
 
   const badgeCount = useMemo(() => {
     if (role === 'TEACHER') return pendingClassRequestCount + unreadFeedbackCount
-    if (role === 'STUDENT') return unseenApprovedClasses.length
-    if (role === 'ADMIN') return unreadFeedbackCount
+    if (role === 'STUDENT') return unseenApprovedClasses.length + unreadNameWarningCount
+    if (isContentAdminRole(role)) return unreadFeedbackCount
     return 0
-  }, [role, pendingClassRequestCount, unreadFeedbackCount, unseenApprovedClasses.length])
+  }, [role, pendingClassRequestCount, unreadFeedbackCount, unreadNameWarningCount, unseenApprovedClasses.length])
 
   const showBubble = Boolean(
     !open && !isQuietRoute && activeNotification && dismissedBubbleKey !== activeNotification.key,
@@ -576,23 +620,36 @@ export default function AssistantWidget() {
               <p className="mt-1 text-[11px] opacity-80">{activeNotification.secondaryNote}</p>
             )}
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
-              {activeNotification.actions.map((action) => (
-                <Link
-                  key={action.to}
-                  to={action.to}
-                  onClick={handleBubbleActionClick}
-                  className={cn(
-                    'inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-bold transition-colors',
-                    activeNotification.tone === 'success'
-                      ? 'bg-teal-700 text-white hover:bg-teal-800'
-                      : activeNotification.tone === 'warning'
-                        ? 'bg-amber-700 text-white hover:bg-amber-800'
-                        : 'bg-indigo-600 text-white hover:bg-indigo-700',
-                  )}
-                >
-                  {action.label}
-                </Link>
-              ))}
+              {activeNotification.actions.map((action) =>
+                action.type === 'approveAll' ? (
+                  <button
+                    key={action.id}
+                    type="button"
+                    disabled={approveAllMutation.isPending}
+                    onClick={() => approveAllMutation.mutate()}
+                    className="inline-flex items-center gap-1 rounded-lg bg-teal-700 px-2.5 py-1 text-xs font-bold text-white transition-colors hover:bg-teal-800 disabled:opacity-60 cursor-pointer"
+                  >
+                    <CheckCheck className="h-3.5 w-3.5" />
+                    {approveAllMutation.isPending ? 'Đang duyệt...' : action.label}
+                  </button>
+                ) : (
+                  <Link
+                    key={action.to}
+                    to={action.to}
+                    onClick={handleBubbleActionClick}
+                    className={cn(
+                      'inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-bold transition-colors',
+                      activeNotification.tone === 'success'
+                        ? 'bg-teal-700 text-white hover:bg-teal-800'
+                        : activeNotification.tone === 'warning'
+                          ? 'bg-amber-700 text-white hover:bg-amber-800'
+                          : 'bg-indigo-600 text-white hover:bg-indigo-700',
+                    )}
+                  >
+                    {action.label}
+                  </Link>
+                ),
+              )}
             </div>
           </motion.div>
         )}
@@ -710,17 +767,30 @@ export default function AssistantWidget() {
                   {activeNotification.secondaryNote && (
                     <p className="text-[11px] opacity-80">{activeNotification.secondaryNote}</p>
                   )}
-                  <div className="flex flex-wrap gap-2 pt-0.5">
-                    {activeNotification.actions.map((action) => (
-                      <Link
-                        key={action.to}
-                        to={action.to}
-                        onClick={handleBubbleActionClick}
-                        className="text-xs font-bold underline underline-offset-2 hover:opacity-80"
-                      >
-                        {action.label}
-                      </Link>
-                    ))}
+                  <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                    {activeNotification.actions.map((action) =>
+                      action.type === 'approveAll' ? (
+                        <button
+                          key={action.id}
+                          type="button"
+                          disabled={approveAllMutation.isPending}
+                          onClick={() => approveAllMutation.mutate()}
+                          className="inline-flex items-center gap-1 rounded-md bg-teal-700 px-2 py-1 text-xs font-bold text-white hover:bg-teal-800 disabled:opacity-60 cursor-pointer"
+                        >
+                          <CheckCheck className="h-3.5 w-3.5" />
+                          {approveAllMutation.isPending ? 'Đang duyệt...' : action.label}
+                        </button>
+                      ) : (
+                        <Link
+                          key={action.to}
+                          to={action.to}
+                          onClick={handleBubbleActionClick}
+                          className="text-xs font-bold underline underline-offset-2 hover:opacity-80"
+                        >
+                          {action.label}
+                        </Link>
+                      ),
+                    )}
                   </div>
                 </div>
               )}

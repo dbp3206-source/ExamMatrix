@@ -45,7 +45,7 @@ public class TeacherGradingServiceImpl implements TeacherGradingService {
     @Override
     public PageResponse<PendingGradingSummaryResponse> getPendingGrading(AttemptStatus status, Pageable pageable) {
         User currentUser = currentUserService.getCurrentUser();
-        boolean isAdmin = "ADMIN".equalsIgnoreCase(currentUser.getRole().getName());
+        boolean isAdmin = com.exammatrix.backend.security.RolePolicy.isContentStaff(currentUser);
         AttemptStatus targetStatus = status != null ? status : AttemptStatus.WAITING_GRADING;
 
         Page<StudentExamAttempt> page;
@@ -258,7 +258,7 @@ public class TeacherGradingServiceImpl implements TeacherGradingService {
                 : attemptRepository.findById(attemptId))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy lượt làm bài"));
 
-        boolean isAdmin = "ADMIN".equalsIgnoreCase(currentUser.getRole().getName());
+        boolean isAdmin = com.exammatrix.backend.security.RolePolicy.isContentStaff(currentUser);
         boolean isOwner = attempt.getTeacher() != null && attempt.getTeacher().getId().equals(currentUser.getId());
         boolean inTeacherClass = !forUpdate && (
                 (attempt.getTeacherClass() != null

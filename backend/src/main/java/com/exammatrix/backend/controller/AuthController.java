@@ -3,12 +3,16 @@ package com.exammatrix.backend.controller;
 import com.exammatrix.backend.dto.request.ChangePasswordRequest;
 import com.exammatrix.backend.dto.request.GoogleStudentLoginRequest;
 import com.exammatrix.backend.dto.request.LoginRequest;
+import com.exammatrix.backend.dto.request.RequestStudentOtpRequest;
+import com.exammatrix.backend.dto.request.ResendStudentOtpRequest;
 import com.exammatrix.backend.dto.request.StudentRegisterRequest;
 import com.exammatrix.backend.dto.request.UpdateProfileRequest;
 import com.exammatrix.backend.dto.response.AuthResponse;
+import com.exammatrix.backend.dto.response.StudentOtpResponse;
 import com.exammatrix.backend.dto.response.UserResponse;
 import com.exammatrix.backend.service.AuthService;
 import com.exammatrix.backend.service.StudentAuthService;
+import com.exammatrix.backend.service.StudentOtpService;
 import com.exammatrix.backend.security.GoogleStudentTokenVerifier;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -33,6 +37,7 @@ public class AuthController {
     private static final String GOOGLE_LOGIN_PATH = "/google/student";
     private final AuthService authService;
     private final StudentAuthService studentAuthService;
+    private final StudentOtpService studentOtpService;
     private final GoogleStudentTokenVerifier googleVerifier;
 
     @Value("${app.google.secure-cookie:false}")
@@ -68,6 +73,25 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(authService.login(request));
+    }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<AuthResponse> refreshSession() {
+        return ResponseEntity.ok(authService.refreshSession());
+    }
+
+    @PostMapping("/register/student/request-otp")
+    public ResponseEntity<StudentOtpResponse> requestStudentOtp(
+            @Valid @RequestBody RequestStudentOtpRequest request
+    ) {
+        return ResponseEntity.ok(studentOtpService.requestOtp(request));
+    }
+
+    @PostMapping("/register/student/resend-otp")
+    public ResponseEntity<StudentOtpResponse> resendStudentOtp(
+            @Valid @RequestBody ResendStudentOtpRequest request
+    ) {
+        return ResponseEntity.ok(studentOtpService.resendOtp(request));
     }
 
     @PostMapping("/register/student")

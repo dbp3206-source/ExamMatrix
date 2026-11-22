@@ -16,7 +16,7 @@ public class NotificationController {
     private final NotificationService notificationService;
 
     @GetMapping("/summary")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CONTENT_ADMIN', 'TEACHER', 'STUDENT')")
     public ResponseEntity<NotificationSummaryResponse> getSummary() {
         return ResponseEntity.ok(notificationService.getSummary());
     }

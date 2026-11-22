@@ -6,7 +6,7 @@ import { ArrowRight, Layers, LayoutGrid, List, Pencil, Plus, Search, Trash2 } fr
 import { toast } from 'sonner'
 import { api } from '@/api/service'
 import { useAuth } from '@/auth/AuthContext'
-import { getSubjectPreset } from '@/constants'
+import { getSubjectPreset, isContentAdminRole } from '@/constants'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -109,7 +109,7 @@ function SubjectFormDialog({ item, onClose }) {
 
 export default function SubjectsPage() {
   const { user } = useAuth()
-  const isAdmin = user?.role === 'ADMIN'
+  const isAdmin = isContentAdminRole(user?.role)
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [viewMode, setViewMode] = useState('grid')

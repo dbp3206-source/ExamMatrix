@@ -9,6 +9,7 @@ import com.exammatrix.backend.entity.User;
 import com.exammatrix.backend.entity.enums.*;
 import com.exammatrix.backend.repository.*;
 import com.exammatrix.backend.security.CurrentUserService;
+import com.exammatrix.backend.security.RolePolicy;
 import com.exammatrix.backend.service.DashboardService;
 import com.exammatrix.backend.service.ScoreScaleService;
 import com.exammatrix.backend.service.TeacherGradingService;
@@ -358,7 +359,9 @@ public class DashboardServiceImpl implements DashboardService {
         }
 
         Map<UUID, long[]> todayStats = new HashMap<>();
+        Map<UUID, BigDecimal> todayBest = new HashMap<>();
         Map<UUID, long[]> yesterdayStats = new HashMap<>();
+        Map<UUID, BigDecimal> yesterdayBest = new HashMap<>();
 
         for (StudentExamAttempt a : allCompleted) {
             if (a.getStudent() == null || !studentById.containsKey(a.getStudent().getId())) continue;
@@ -369,19 +372,21 @@ public class DashboardServiceImpl implements DashboardService {
             long[] t = todayStats.computeIfAbsent(sid, k -> new long[2]);
             t[0]++;
             if (high) t[1]++;
+            todayBest.merge(sid, scoreOnTen, (prev, cur) -> cur.compareTo(prev) > 0 ? cur : prev);
 
             LocalDateTime ts = a.getGradedAt() != null ? a.getGradedAt() : a.getSubmittedAt();
             if (ts != null && ts.isBefore(startOfToday)) {
                 long[] y = yesterdayStats.computeIfAbsent(sid, k -> new long[2]);
                 y[0]++;
                 if (high) y[1]++;
+                yesterdayBest.merge(sid, scoreOnTen, (prev, cur) -> cur.compareTo(prev) > 0 ? cur : prev);
             }
         }
 
-        record StudentScore(User user, long total, long highCount, BigDecimal rate) {}
+        record StudentScore(User user, long total, long highCount, BigDecimal rate, BigDecimal highestScore) {}
 
         Comparator<StudentScore> comparator = Comparator
-                .comparing(StudentScore::rate).reversed()
+                .comparing(StudentScore::highestScore).reversed()
                 .thenComparing(Comparator.comparingLong(StudentScore::highCount).reversed())
                 .thenComparing(Comparator.comparingLong(StudentScore::total).reversed())
                 .thenComparing(ss -> ss.user().getId());
@@ -392,7 +397,9 @@ public class DashboardServiceImpl implements DashboardService {
                     long[] st = todayStats.get(s.getId());
                     BigDecimal rate = BigDecimal.valueOf(st[1] * 100L)
                             .divide(BigDecimal.valueOf(st[0]), 1, RoundingMode.HALF_UP);
-                    return new StudentScore(s, st[0], st[1], rate);
+                    BigDecimal best = todayBest.getOrDefault(s.getId(), BigDecimal.ZERO)
+                            .setScale(2, RoundingMode.HALF_UP);
+                    return new StudentScore(s, st[0], st[1], rate, best);
                 })
                 .sorted(comparator)
                 .toList();
@@ -403,7 +410,9 @@ public class DashboardServiceImpl implements DashboardService {
                     long[] st = yesterdayStats.get(s.getId());
                     BigDecimal rate = BigDecimal.valueOf(st[1] * 100L)
                             .divide(BigDecimal.valueOf(st[0]), 1, RoundingMode.HALF_UP);
-                    return new StudentScore(s, st[0], st[1], rate);
+                    BigDecimal best = yesterdayBest.getOrDefault(s.getId(), BigDecimal.ZERO)
+                            .setScale(2, RoundingMode.HALF_UP);
+                    return new StudentScore(s, st[0], st[1], rate, best);
                 })
                 .sorted(comparator)
                 .toList();
@@ -445,6 +454,7 @@ public class DashboardServiceImpl implements DashboardService {
                     ss.total(),
                     ss.highCount(),
                     ss.rate(),
+                    ss.highestScore(),
                     prev,
                     delta,
                     isNew,
@@ -777,10 +787,7 @@ public class DashboardServiceImpl implements DashboardService {
         );
     }
 
-    private boolean isAdmin(User user) { return hasRole(user, "ADMIN"); }
-    private boolean isTeacher(User user) { return hasRole(user, "TEACHER"); }
-    private boolean isStudent(User user) { return hasRole(user, "STUDENT"); }
-    private boolean hasRole(User user, String role) {
-        return user != null && user.getRole() != null && role.equalsIgnoreCase(user.getRole().getName());
-    }
+    private boolean isAdmin(User user) { return RolePolicy.isContentStaff(user); }
+    private boolean isTeacher(User user) { return RolePolicy.isTeacher(user); }
+    private boolean isStudent(User user) { return RolePolicy.isStudent(user); }
 }

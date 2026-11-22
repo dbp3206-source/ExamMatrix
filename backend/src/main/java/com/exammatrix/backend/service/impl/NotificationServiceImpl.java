@@ -5,8 +5,10 @@ import com.exammatrix.backend.entity.User;
 import com.exammatrix.backend.entity.enums.StudentAssignmentStatus;
 import com.exammatrix.backend.repository.StudentFeedbackRecipientRepository;
 import com.exammatrix.backend.repository.StudentFeedbackRepository;
+import com.exammatrix.backend.repository.StudentNameWarningRepository;
 import com.exammatrix.backend.repository.StudentTeacherAssignmentRepository;
 import com.exammatrix.backend.security.CurrentUserService;
+import com.exammatrix.backend.security.RolePolicy;
 import com.exammatrix.backend.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -22,6 +24,7 @@ public class NotificationServiceImpl implements NotificationService {
     private final StudentTeacherAssignmentRepository assignmentRepository;
     private final StudentFeedbackRepository feedbackRepository;
     private final StudentFeedbackRecipientRepository recipientRepository;
+    private final StudentNameWarningRepository nameWarningRepository;
     private final CurrentUserService currentUserService;
 
     @Override
@@ -29,14 +32,14 @@ public class NotificationServiceImpl implements NotificationService {
         User user = currentUserService.getCurrentUser();
         String role = user.getRole().getName().toUpperCase(Locale.ROOT);
 
-        if ("TEACHER".equals(role)) {
+        if (RolePolicy.TEACHER.equals(role)) {
             long pendingRequests = assignmentRepository.countByTeacher_IdAndStatus(
                     user.getId(), StudentAssignmentStatus.PENDING);
             long unreadFeedbacks = recipientRepository.countByTeacher_IdAndReadFalse(user.getId());
-            return new NotificationSummaryResponse(role, pendingRequests, unreadFeedbacks, List.of());
+            return new NotificationSummaryResponse(role, pendingRequests, unreadFeedbacks, 0L, List.of());
         }
 
-        if ("STUDENT".equals(role)) {
+        if (RolePolicy.STUDENT.equals(role)) {
             List<NotificationSummaryResponse.ApprovedClassNotification> approvedClasses = assignmentRepository
                     .findByStudent_IdAndStatusOrderByReviewedAtDesc(user.getId(), StudentAssignmentStatus.APPROVED)
                     .stream()
@@ -48,14 +51,15 @@ public class NotificationServiceImpl implements NotificationService {
                             a.getReviewedAt() != null ? a.getReviewedAt() : a.getRequestedAt()
                     ))
                     .toList();
-            return new NotificationSummaryResponse(role, 0L, 0L, approvedClasses);
+            long unreadWarnings = nameWarningRepository.countByStudent_IdAndReadFalse(user.getId());
+            return new NotificationSummaryResponse(role, 0L, 0L, unreadWarnings, approvedClasses);
         }
 
-        if ("ADMIN".equals(role)) {
+        if (RolePolicy.isContentStaff(role)) {
             long unreadFeedbacks = feedbackRepository.countByReadByAdminFalse();
-            return new NotificationSummaryResponse(role, 0L, unreadFeedbacks, List.of());
+            return new NotificationSummaryResponse(role, 0L, unreadFeedbacks, 0L, List.of());
         }
 
-        return new NotificationSummaryResponse(role, 0L, 0L, List.of());
+        return new NotificationSummaryResponse(role, 0L, 0L, 0L, List.of());
     }
 }

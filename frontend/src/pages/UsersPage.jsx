@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Lock, Plus, Search, Unlock } from 'lucide-react'
+import { AlertTriangle, History, Lock, Plus, Search, Unlock } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/service'
 import { useAuth } from '@/auth/AuthContext'
-import { roleLabel } from '@/constants'
-import { formatDate } from '@/utils'
+import { isAnyAdminRole, roleLabel } from '@/constants'
+import { formatDate, formatDateTime } from '@/utils'
 import { validateBcryptPasswordLength } from '@/utils/passwordValidation'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { EmptyState, ErrorState, FieldError, LoadingState, PageHeader, Pagination } from '@/components/common/StateFeedback'
 
 function getInitials(fullName) {
@@ -34,14 +35,14 @@ function UserFormDialog({ onClose }) {
     setError,
     formState: { errors },
   } = useForm({
-    defaultValues: { username: '', fullName: '', email: '', password: '' },
+    defaultValues: { username: '', fullName: '', email: '', password: '', role: 'TEACHER' },
   })
 
   const mutation = useMutation({
     mutationFn: api.createUser,
-    onSuccess: () => {
+    onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ['users'] })
-      toast.success('Đã thêm tài khoản giáo viên mới thành công')
+      toast.success(`Đã tạo tài khoản ${roleLabel(created?.role)} thành công`)
       onClose()
     },
     onError: (error) => {
@@ -57,7 +58,7 @@ function UserFormDialog({ onClose }) {
     <Dialog open onOpenChange={(open) => { if (!open && !mutation.isPending) onClose() }}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Thêm tài khoản giáo viên bộ môn</DialogTitle>
+          <DialogTitle>Tạo tài khoản nhân sự mới</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit((values) => mutation.mutate(values))} noValidate className="space-y-4">
           {errors.root && (
@@ -111,6 +112,15 @@ function UserFormDialog({ onClose }) {
             </div>
 
             <div>
+              <Label htmlFor="u-form-role">Vai trò</Label>
+              <Select id="u-form-role" {...register('role', { required: true })}>
+                <option value="TEACHER">Giáo viên bộ môn</option>
+                <option value="CONTENT_ADMIN">Admin nội dung</option>
+                <option value="USER_ADMIN">Admin người dùng</option>
+              </Select>
+            </div>
+
+            <div className="sm:col-span-2">
               <Label htmlFor="u-password">Mật khẩu khởi tạo</Label>
               <Input
                 id="u-password"
@@ -142,10 +152,135 @@ function UserFormDialog({ onClose }) {
   )
 }
 
+function StudentNameWarningDialog({ student, onClose }) {
+  const queryClient = useQueryClient()
+  const [reason, setReason] = useState(
+    'Tên hiển thị hiện tại chưa đúng họ tên hoặc không phù hợp quy định. Vui lòng cập nhật lại họ tên trong Hồ sơ cá nhân.'
+  )
+  const [formError, setFormError] = useState('')
+
+  const warningsQuery = useQuery({
+    queryKey: ['user-name-warnings', student.id],
+    queryFn: () => api.getStudentNameWarnings(student.id),
+  })
+
+  const sendMutation = useMutation({
+    mutationFn: (payload) => api.sendStudentNameWarning(student.id, payload),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['user-name-warnings', student.id] })
+      toast.success(
+        res?.emailDelivered
+          ? `Đã gửi cảnh báo đổi tên trong hệ thống và qua email tới ${student.fullName}`
+          : `Đã ghi nhận và gửi cảnh báo đổi tên tới ${student.fullName}`
+      )
+      setFormError('')
+    },
+    onError: (err) => {
+      setFormError(err.message || 'Không thể gửi cảnh báo đổi tên')
+    },
+  })
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    const trimmed = reason.trim()
+    if (!trimmed) {
+      setFormError('Vui lòng nhập nội dung cảnh báo yêu cầu đổi tên')
+      return
+    }
+    sendMutation.mutate({ reason: trimmed })
+  }
+
+  const history = warningsQuery.data || []
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open && !sendMutation.isPending) onClose() }}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Cảnh báo đổi tên học sinh</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm">
+            <div className="font-bold text-slate-900">{student.fullName}</div>
+            <div className="mt-0.5 text-xs text-slate-500">
+              @{student.username} · {student.email}
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-3">
+            {formError && (
+              <Alert variant="destructive">
+                <AlertDescription>{formError}</AlertDescription>
+              </Alert>
+            )}
+            <div>
+              <Label htmlFor="warn-reason">Nội dung cảnh báo yêu cầu đổi tên</Label>
+              <Textarea
+                id="warn-reason"
+                rows={3}
+                maxLength={500}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Nhập lý do cảnh báo và yêu cầu học sinh cập nhật lại tên..."
+              />
+              <p className="mt-1 text-[11px] text-slate-500">
+                Hệ thống không tự ý xóa tài khoản; khi học sinh tự đổi tên, toàn bộ kết quả thi và dữ liệu lớp vẫn được giữ nguyên.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={onClose} disabled={sendMutation.isPending}>
+                Đóng
+              </Button>
+              <Button type="submit" variant="amber" disabled={sendMutation.isPending}>
+                <AlertTriangle className="h-4 w-4" />
+                {sendMutation.isPending ? 'Đang gửi...' : 'Gửi cảnh báo đổi tên'}
+              </Button>
+            </div>
+          </form>
+
+          <div className="border-t border-slate-200 pt-3">
+            <div className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-600">
+              <History className="h-3.5 w-3.5" />
+              Lịch sử cảnh báo ({history.length})
+            </div>
+            {warningsQuery.isLoading ? (
+              <div className="text-xs text-slate-500">Đang tải lịch sử cảnh báo...</div>
+            ) : history.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-200 p-3 text-xs text-slate-500">
+                Chưa có cảnh báo nào được gửi tới tài khoản học sinh này.
+              </div>
+            ) : (
+              <ul className="max-h-52 space-y-2 overflow-y-auto pr-1">
+                {history.map((item) => (
+                  <li key={item.id} className="rounded-lg border border-slate-200 bg-white p-2.5 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-slate-800">Người gửi: {item.senderName}</span>
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant={item.read ? 'success' : 'warning'} className="text-[10px]">
+                          {item.read ? 'Đã đọc' : 'Chưa đọc'}
+                        </Badge>
+                        <span className="text-[11px] text-slate-500 tabular-nums">
+                          {formatDateTime(item.createdAt)}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="mt-1 text-slate-700 leading-relaxed">{item.reason}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export default function UsersPage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
+  const [warningTarget, setWarningTarget] = useState(null)
   const [filters, setFilters] = useState({ search: '', role: '', status: '', page: 0, size: 10 })
 
   useEffect(() => {
@@ -168,6 +303,8 @@ export default function UsersPage() {
 
   const setFilter = (name, value) =>
     setFilters((prev) => ({ ...prev, [name]: value, page: name === 'page' ? value : 0 }))
+
+  const isUserAdminOnly = user?.role === 'USER_ADMIN'
 
   const columns = useMemo(
     () => [
@@ -200,7 +337,7 @@ export default function UsersPage() {
         cell: ({ row }) => {
           const r = row.original.role
           return (
-            <Badge variant={r === 'ADMIN' ? 'amber' : r === 'TEACHER' ? 'indigo' : 'teal'}>
+            <Badge variant={isAnyAdminRole(r) ? 'amber' : r === 'TEACHER' ? 'indigo' : 'teal'}>
               {roleLabel(r)}
             </Badge>
           )
@@ -229,31 +366,48 @@ export default function UsersPage() {
           if (item.id === user?.id) {
             return <span className="text-xs font-medium text-slate-400">Tài khoản hiện tại</span>
           }
-          return item.status === 'ACTIVE' ? (
-            <Button
-              variant="destructive"
-              size="sm"
-              disabled={statusMutation.isPending}
-              onClick={() => statusMutation.mutate({ id: item.id, status: 'LOCKED' })}
-            >
-              <Lock className="h-3.5 w-3.5" />
-              Khóa tài khoản
-            </Button>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={statusMutation.isPending}
-              onClick={() => statusMutation.mutate({ id: item.id, status: 'ACTIVE' })}
-            >
-              <Unlock className="h-3.5 w-3.5" />
-              Mở khóa
-            </Button>
+          if (isUserAdminOnly && item.role === 'ADMIN') {
+            return <span className="text-xs font-medium text-slate-400">Được bảo vệ</span>
+          }
+          return (
+            <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
+              {item.role === 'STUDENT' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setWarningTarget(item)}
+                >
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                  Cảnh báo tên
+                </Button>
+              )}
+              {item.status === 'ACTIVE' ? (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={statusMutation.isPending}
+                  onClick={() => statusMutation.mutate({ id: item.id, status: 'LOCKED' })}
+                >
+                  <Lock className="h-3.5 w-3.5" />
+                  Khóa tài khoản
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={statusMutation.isPending}
+                  onClick={() => statusMutation.mutate({ id: item.id, status: 'ACTIVE' })}
+                >
+                  <Unlock className="h-3.5 w-3.5" />
+                  Mở khóa
+                </Button>
+              )}
+            </div>
           )
         },
       },
     ],
-    [statusMutation, user?.id]
+    [statusMutation, user?.id, isUserAdminOnly]
   )
 
   return (
@@ -262,11 +416,11 @@ export default function UsersPage() {
         accent="indigo"
         eyebrow="QUẢN TRỊ HỆ THỐNG"
         title="Quản lý người dùng"
-        description="Tạo tài khoản giáo viên mới và kiểm soát trạng thái truy cập hệ thống."
+        description="Tạo tài khoản nhân sự, kiểm tra tên học sinh và kiểm soát trạng thái truy cập hệ thống."
         action={
           <Button onClick={() => setOpen(true)}>
             <Plus className="h-4 w-4" />
-            Thêm giáo viên
+            Thêm tài khoản
           </Button>
         }
       />
@@ -289,7 +443,9 @@ export default function UsersPage() {
           <Label htmlFor="u-role">Vai trò</Label>
           <Select id="u-role" value={filters.role} onChange={(e) => setFilter('role', e.target.value)}>
             <option value="">Tất cả vai trò</option>
-            <option value="ADMIN">Quản trị viên</option>
+            <option value="ADMIN">Admin tổng</option>
+            <option value="CONTENT_ADMIN">Admin nội dung</option>
+            <option value="USER_ADMIN">Admin người dùng</option>
             <option value="TEACHER">Giáo viên bộ môn</option>
             <option value="STUDENT">Học sinh</option>
           </Select>
@@ -324,6 +480,9 @@ export default function UsersPage() {
       )}
 
       {open && <UserFormDialog onClose={() => setOpen(false)} />}
+      {warningTarget && (
+        <StudentNameWarningDialog student={warningTarget} onClose={() => setWarningTarget(null)} />
+      )}
     </div>
   )
 }

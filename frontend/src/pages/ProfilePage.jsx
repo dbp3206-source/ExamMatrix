@@ -1,12 +1,13 @@
 import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { KeyRound, Save } from 'lucide-react'
+import { AlertTriangle, Check, KeyRound, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/service'
 import { useAuth } from '@/auth/AuthContext'
-import { roleLabel } from '@/constants'
+import { isAnyAdminRole, roleLabel } from '@/constants'
+import { formatDateTime } from '@/utils'
 import { validateBcryptPasswordLength } from '@/utils/passwordValidation'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -27,10 +28,26 @@ function getInitials(fullName) {
 export default function ProfilePage() {
   const { user, updateLocalUser, clearSessionOnly } = useAuth()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const isStudent = user?.role === 'STUDENT'
 
   useEffect(() => {
     document.title = 'Hồ sơ cá nhân | Exam Matrix'
   }, [])
+
+  const warningsQuery = useQuery({
+    queryKey: ['student', 'name-warnings'],
+    queryFn: api.getMyNameWarnings,
+    enabled: isStudent,
+  })
+
+  const markReadMutation = useMutation({
+    mutationFn: api.markMyNameWarningRead,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['student', 'name-warnings'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'summary'] })
+    },
+  })
 
   const profile = useForm({
     defaultValues: {
@@ -52,6 +69,7 @@ export default function ProfilePage() {
     onSuccess: (next) => {
       updateLocalUser(next)
       profile.reset({ fullName: next.fullName, email: next.email })
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'summary'] })
       toast.success('Đã cập nhật hồ sơ')
     },
     onError: (error) => {
@@ -94,7 +112,8 @@ export default function ProfilePage() {
     })
   }
 
-  const roleVariant = user?.role === 'ADMIN' ? 'amber' : user?.role === 'STUDENT' ? 'teal' : 'indigo'
+  const roleVariant = isAnyAdminRole(user?.role) ? 'amber' : isStudent ? 'teal' : 'indigo'
+  const warnings = warningsQuery.data || []
 
   return (
     <div className="space-y-6">
@@ -104,6 +123,49 @@ export default function ProfilePage() {
         title="Hồ sơ cá nhân"
         description="Cập nhật thông tin liên hệ và mật khẩu đăng nhập của bạn."
       />
+
+      {isStudent && warnings.length > 0 && (
+        <Card className="border-amber-300 bg-amber-50/70">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base text-amber-950">
+              <AlertTriangle className="h-5 w-5 text-amber-700" />
+              Cảnh báo yêu cầu cập nhật tên hiển thị ({warnings.filter((w) => !w.read).length} chưa đọc)
+            </CardTitle>
+            <CardDescription className="text-amber-900">
+              Vui lòng cập nhật lại họ và tên ở biểu mẫu bên dưới. Việc đổi tên không làm ảnh hưởng tới bài thi hay điểm số của bạn.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2.5">
+            {warnings.map((w) => (
+              <div
+                key={w.id}
+                className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-amber-200 bg-white p-3.5 text-sm"
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <span className="font-semibold text-slate-800">Từ: {w.senderName}</span>
+                    <span>·</span>
+                    <span className="tabular-nums">{formatDateTime(w.createdAt)}</span>
+                    {!w.read && <Badge variant="warning" className="text-[10px]">Mới</Badge>}
+                  </div>
+                  <p className="text-slate-800">{w.reason}</p>
+                </div>
+                {!w.read && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={markReadMutation.isPending}
+                    onClick={() => markReadMutation.mutate(w.id)}
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                    Đã hiểu
+                  </Button>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>

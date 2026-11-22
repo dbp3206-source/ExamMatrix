@@ -164,7 +164,9 @@ public class SecurityConfig {
                     "/auth/login",
                     "/auth/google/student/challenge",
                     "/auth/google/student",
-                    "/auth/register/student"
+                    "/auth/register/student",
+                    "/auth/register/student/request-otp",
+                    "/auth/register/student/resend-otp"
                 ).permitAll()
 
                 .requestMatchers(
@@ -184,56 +186,67 @@ public class SecurityConfig {
                 ).hasRole("TEACHER")
 
                 .requestMatchers("/teacher/**")
-                .hasAnyRole("ADMIN", "TEACHER")
+                .hasAnyRole("ADMIN", "CONTENT_ADMIN", "TEACHER")
+
+                .requestMatchers("/admin/results/**")
+                .hasAnyRole("ADMIN", "CONTENT_ADMIN")
+
+                .requestMatchers("/admin/**")
+                .hasRole("ADMIN")
 
                 .requestMatchers(
-                    "/admin/**",
                     "/roles/**",
                     "/users/**"
-                ).hasRole("ADMIN")
+                ).hasAnyRole("ADMIN", "USER_ADMIN")
+
+                .requestMatchers(
+                    HttpMethod.GET,
+                    "/subjects/**",
+                    "/chapters/**"
+                ).hasAnyRole("ADMIN", "CONTENT_ADMIN", "TEACHER")
 
                 .requestMatchers(
                     HttpMethod.POST,
                     "/subjects/**",
                     "/chapters/**"
-                ).hasRole("ADMIN")
+                ).hasAnyRole("ADMIN", "CONTENT_ADMIN")
 
                 .requestMatchers(
                     HttpMethod.PATCH,
                     "/subjects/**",
                     "/chapters/**"
-                ).hasRole("ADMIN")
+                ).hasAnyRole("ADMIN", "CONTENT_ADMIN")
 
                 .requestMatchers(
                     HttpMethod.DELETE,
                     "/subjects/**",
                     "/chapters/**"
-                ).hasRole("ADMIN")
+                ).hasAnyRole("ADMIN", "CONTENT_ADMIN")
 
                 .requestMatchers("/questions/**")
-                .hasAnyRole("ADMIN", "TEACHER")
+                .hasAnyRole("ADMIN", "CONTENT_ADMIN", "TEACHER")
 
                 .requestMatchers(
                     "/exam-matrices",
                     "/exam-matrices/**"
-                ).hasAnyRole("ADMIN", "TEACHER")
+                ).hasAnyRole("ADMIN", "CONTENT_ADMIN", "TEACHER")
 
                 .requestMatchers(
                         "/exam-papers",
                         "/exam-papers/**"
-                ).hasAnyRole("ADMIN", "TEACHER")
+                ).hasAnyRole("ADMIN", "CONTENT_ADMIN", "TEACHER")
 
                 .requestMatchers(HttpMethod.GET, "/dashboard/analytics")
-                .hasAnyRole("ADMIN", "TEACHER", "STUDENT")
+                .hasAnyRole("ADMIN", "CONTENT_ADMIN", "TEACHER", "STUDENT")
 
                 .requestMatchers("/dashboard/**")
-                .hasAnyRole("ADMIN", "TEACHER")
+                .hasAnyRole("ADMIN", "CONTENT_ADMIN", "TEACHER")
 
                 .requestMatchers("/feedbacks/**")
-                .hasAnyRole("ADMIN", "TEACHER")
+                .hasAnyRole("ADMIN", "CONTENT_ADMIN", "TEACHER")
 
                 .requestMatchers("/notifications/**")
-                .hasAnyRole("ADMIN", "TEACHER", "STUDENT")
+                .hasAnyRole("ADMIN", "CONTENT_ADMIN", "TEACHER", "STUDENT")
 
                 .anyRequest().authenticated()
             )

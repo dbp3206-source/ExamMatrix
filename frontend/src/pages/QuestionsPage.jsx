@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { emitAssistantHint } from '@/utils/assistant'
 import { api } from '@/api/service'
 import { useAuth } from '@/auth/AuthContext'
-import { DIFFICULTIES, QUESTION_TYPES, getSubjectPreset, typeLabel, typeShortLabel } from '@/constants'
+import { DIFFICULTIES, QUESTION_TYPES, getSubjectPreset, isContentAdminRole, typeLabel, typeShortLabel } from '@/constants'
 import { downloadSampleDocx } from '@/utils/docxSample'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -745,7 +745,7 @@ Câu 2: Trình bày khái niệm lớp và đối tượng trong OOP.
 
 export default function QuestionsPage() {
   const { user } = useAuth()
-  const isAdmin = user?.role === 'ADMIN'
+  const isAdmin = isContentAdminRole(user?.role)
   const [searchParams] = useSearchParams()
   const [filters, setFilters] = useState(() => ({
     search: '',

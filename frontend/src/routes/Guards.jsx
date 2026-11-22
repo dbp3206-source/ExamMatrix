@@ -1,5 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '@/auth/AuthContext'
+import { isContentAdminRole, isUserManagerRole } from '@/constants'
 import { ErrorState, LoadingState } from '@/components/common/StateFeedback'
 import { Button } from '@/components/ui/button'
 
@@ -34,6 +35,16 @@ export function AdminRoute() {
   return user?.role === 'ADMIN' ? <Outlet /> : <Navigate to="/403" replace />
 }
 
+export function ContentAdminRoute() {
+  const { user } = useAuth()
+  return isContentAdminRole(user?.role) ? <Outlet /> : <Navigate to="/403" replace />
+}
+
+export function UserManagerRoute() {
+  const { user } = useAuth()
+  return isUserManagerRole(user?.role) ? <Outlet /> : <Navigate to="/403" replace />
+}
+
 export function TeacherOnlyRoute() {
   const { user } = useAuth()
   return user?.role === 'TEACHER' ? <Outlet /> : <Navigate to="/403" replace />
@@ -41,7 +52,9 @@ export function TeacherOnlyRoute() {
 
 export function TeacherOrAdminRoute() {
   const { user } = useAuth()
-  return user?.role === 'TEACHER' || user?.role === 'ADMIN' ? <Outlet /> : <Navigate to="/403" replace />
+  return user?.role === 'TEACHER' || isContentAdminRole(user?.role)
+    ? <Outlet />
+    : <Navigate to="/403" replace />
 }
 
 export function StudentRoute() {

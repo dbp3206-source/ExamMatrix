@@ -71,6 +71,22 @@ public class AuthServiceImpl implements AuthService {
 
         return new AuthResponse(
             accessToken,
+            jwtService.computeExpiresAt(),
+            jwtService.getExpirationSeconds(),
+            convertToResponse(user)
+        );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AuthResponse refreshSession() {
+        User user = currentUserService.getCurrentUser();
+        String accessToken = jwtService.generateToken(user);
+
+        return new AuthResponse(
+            accessToken,
+            jwtService.computeExpiresAt(),
+            jwtService.getExpirationSeconds(),
             convertToResponse(user)
         );
     }

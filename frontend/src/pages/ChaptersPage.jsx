@@ -6,7 +6,7 @@ import { ArrowRight, Layers, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/api/service'
 import { useAuth } from '@/auth/AuthContext'
-import { getSubjectPreset } from '@/constants'
+import { getSubjectPreset, isContentAdminRole } from '@/constants'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -138,7 +138,7 @@ function ChapterFormDialog({ item, subjects, chapters, selectedSubject, onClose 
 
 export default function ChaptersPage() {
   const { user } = useAuth()
-  const isAdmin = user?.role === 'ADMIN'
+  const isAdmin = isContentAdminRole(user?.role)
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const selectedSubject = params.get('subjectId') || ''

@@ -14,7 +14,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/admin/results")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('ADMIN', 'CONTENT_ADMIN')")
 @RequiredArgsConstructor
 public class AdminResultsController {
     private final AdminResultsService adminResultsService;

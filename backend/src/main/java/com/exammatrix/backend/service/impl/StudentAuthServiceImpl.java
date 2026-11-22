@@ -10,6 +10,7 @@ import com.exammatrix.backend.repository.RoleRepository;
 import com.exammatrix.backend.repository.UserRepository;
 import com.exammatrix.backend.security.JwtService;
 import com.exammatrix.backend.service.StudentAuthService;
+import com.exammatrix.backend.service.StudentOtpService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -28,9 +29,10 @@ public class StudentAuthServiceImpl implements StudentAuthService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final StudentOtpService studentOtpService;
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = ResponseStatusException.class)
     public AuthResponse registerStudent(StudentRegisterRequest request) {
         String normalizedUsername = request.getUsername().trim().toLowerCase(Locale.ROOT);
         String normalizedEmail = request.getEmail().trim().toLowerCase(Locale.ROOT);
@@ -42,6 +44,8 @@ public class StudentAuthServiceImpl implements StudentAuthService {
         if (userRepository.existsByEmailIgnoreCase(normalizedEmail)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Email đã được sử dụng");
         }
+
+        studentOtpService.verifyAndConsumeOtp(normalizedEmail, request.getOtp());
 
         Role studentRole = roleRepository.findByNameIgnoreCase("STUDENT")
                 .orElseGet(() -> roleRepository.save(Role.builder().name("STUDENT").build()));
@@ -112,6 +116,11 @@ public class StudentAuthServiceImpl implements StudentAuthService {
                 savedUser.getUpdatedAt()
         );
 
-        return new AuthResponse(token, userResponse);
+        return new AuthResponse(
+                token,
+                jwtService.computeExpiresAt(),
+                jwtService.getExpirationSeconds(),
+                userResponse
+        );
     }
 }

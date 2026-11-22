@@ -1,7 +1,14 @@
 import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import MainLayout from '@/layouts/MainLayout'
-import { AdminRoute, ProtectedRoute, StudentRoute, TeacherOnlyRoute, TeacherOrAdminRoute } from '@/routes/Guards'
+import {
+  ContentAdminRoute,
+  ProtectedRoute,
+  StudentRoute,
+  TeacherOnlyRoute,
+  TeacherOrAdminRoute,
+  UserManagerRoute,
+} from '@/routes/Guards'
 import { useAuth } from '@/auth/AuthContext'
 import { LoadingState } from '@/components/common/StateFeedback'
 
@@ -35,6 +42,9 @@ function HomeRoute() {
   const { user } = useAuth()
   if (user?.role === 'STUDENT') {
     return <Navigate to="/hoc-sinh/tong-quan" replace />
+  }
+  if (user?.role === 'USER_ADMIN') {
+    return <Navigate to="/403" replace />
   }
   return <DashboardPage />
 }
@@ -77,9 +87,12 @@ export default function App() {
               <Route path="giao-vien/duyet-hoc-sinh" element={<TeacherStudentRequestsPage />} />
             </Route>
 
-            <Route element={<AdminRoute />}>
-              <Route path="nguoi-dung" element={<UsersPage />} />
+            <Route element={<ContentAdminRoute />}>
               <Route path="ket-qua" element={<AdminResultsPage />} />
+            </Route>
+
+            <Route element={<UserManagerRoute />}>
+              <Route path="nguoi-dung" element={<UsersPage />} />
             </Route>
 
             <Route element={<StudentRoute />}>
