@@ -245,7 +245,7 @@ function AdminDashboardWorkspace({ analytics, weekStart, setWeekStart, onRefresh
       <PageHeader
         title="Tổng quan quản trị"
         description="Lượt phiên truy cập theo tuần (GMT+7) và bảng xếp hạng hoạt động nổi bật."
-        actions={
+        action={
           <div className="flex flex-wrap items-center gap-2">
             <FeedbackInboxButton role="ADMIN" />
             <Button size="sm" variant="outline" asChild>
@@ -541,7 +541,7 @@ function TeacherDashboardWorkspace({
       <PageHeader
         title="Tổng quan giáo viên"
         description="Theo dõi ngân hàng câu hỏi bạn biên soạn và phổ điểm thang 10 của học sinh."
-        actions={
+        action={
           <div className="flex flex-wrap items-center gap-2">
             <FeedbackInboxButton role="TEACHER" />
             <Button size="sm" variant="outline" onClick={onRefresh} disabled={isFetching}>
@@ -843,7 +843,7 @@ function StudentDashboardWorkspace({ analytics, onRefresh, isFetching }) {
       <PageHeader
         title="Tổng quan học tập"
         description="Theo dõi tiến độ làm bài, kết quả thang điểm 10 và mức độ nắm vững từng chương."
-        actions={
+        action={
           <div className="flex items-center gap-2">
             <Button size="sm" variant="teal" asChild>
               <Link to="/hoc-sinh/de-thi">
