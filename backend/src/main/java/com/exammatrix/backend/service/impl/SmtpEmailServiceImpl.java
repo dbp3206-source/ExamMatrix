@@ -187,7 +187,7 @@ public class SmtpEmailServiceImpl implements EmailService {
             if (response.statusCode() >= 200 && response.statusCode() < 300) {
                 return true;
             }
-            log.warn("{} email delivery returned HTTP {}", providerName, response.statusCode());
+            log.warn("{} email delivery returned HTTP {}: {}", providerName, response.statusCode(), response.body());
         } catch (Exception ex) {
             log.warn("{} email delivery failed: {}", providerName, ex.getClass().getSimpleName());
         }
