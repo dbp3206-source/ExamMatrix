@@ -7,8 +7,10 @@ import com.exammatrix.backend.entity.*;
 import com.exammatrix.backend.entity.enums.AttemptStatus;
 import com.exammatrix.backend.entity.enums.ExamType;
 import com.exammatrix.backend.entity.enums.QuestionType;
+import com.exammatrix.backend.entity.enums.StudentAssignmentStatus;
 import com.exammatrix.backend.repository.StudentAttemptAnswerRepository;
 import com.exammatrix.backend.repository.StudentExamAttemptRepository;
+import com.exammatrix.backend.repository.StudentTeacherAssignmentRepository;
 import com.exammatrix.backend.security.CurrentUserService;
 import com.exammatrix.backend.service.ScoreScaleService;
 import com.exammatrix.backend.service.TeacherGradingService;
@@ -31,6 +33,7 @@ import java.util.stream.Collectors;
 public class TeacherGradingServiceImpl implements TeacherGradingService {
     private final StudentExamAttemptRepository attemptRepository;
     private final StudentAttemptAnswerRepository attemptAnswerRepository;
+    private final StudentTeacherAssignmentRepository assignmentRepository;
     private final CurrentUserService currentUserService;
     private final ScoreScaleService scoreScaleService;
 
@@ -106,6 +109,14 @@ public class TeacherGradingServiceImpl implements TeacherGradingService {
                             ? a.getChoices().stream().map(Answer::getId).toList()
                             : Collections.emptyList();
 
+                    List<AnswerResponse> options = q.getAnswers().stream()
+                            .map(opt -> AnswerResponse.builder()
+                                    .id(opt.getId())
+                                    .content(opt.getContent())
+                                    .isCorrect(opt.getIsCorrect())
+                                    .build())
+                            .toList();
+
                     return GradingQuestionAnswerResponse.builder()
                             .attemptAnswerId(a != null ? a.getId() : null)
                             .questionId(q.getId())
@@ -116,6 +127,7 @@ public class TeacherGradingServiceImpl implements TeacherGradingService {
                             .essayAnswer(a != null ? a.getEssayAnswer() : null)
                             .referenceAnswer(q.getReferenceAnswer())
                             .selectedAnswerIds(selectedChoices)
+                            .options(options)
                             .awardedScore(a != null ? a.getAwardedScore() : null)
                             .feedback(a != null ? a.getFeedback() : null)
                             .isCorrect(a != null ? a.getIsCorrect() : null)
@@ -247,10 +259,17 @@ public class TeacherGradingServiceImpl implements TeacherGradingService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy lượt làm bài"));
 
         boolean isAdmin = "ADMIN".equalsIgnoreCase(currentUser.getRole().getName());
-        boolean isOwner = attempt.getTeacher().getId().equals(currentUser.getId());
+        boolean isOwner = attempt.getTeacher() != null && attempt.getTeacher().getId().equals(currentUser.getId());
+        boolean inTeacherClass = !forUpdate && (
+                (attempt.getTeacherClass() != null
+                        && attempt.getTeacherClass().getTeacher() != null
+                        && attempt.getTeacherClass().getTeacher().getId().equals(currentUser.getId()))
+                || (attempt.getStudent() != null && assignmentRepository.existsByStudent_IdAndTeacher_IdAndStatus(
+                        attempt.getStudent().getId(), currentUser.getId(), StudentAssignmentStatus.APPROVED))
+        );
 
-        if (!isAdmin && !isOwner) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền chấm bài thi của giáo viên khác");
+        if (!isAdmin && !isOwner && !inTeacherClass) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền xem hoặc chấm bài thi của giáo viên khác");
         }
 
         return attempt;

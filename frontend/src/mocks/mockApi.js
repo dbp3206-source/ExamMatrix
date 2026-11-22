@@ -1066,4 +1066,7 @@ export const mockApi = {
   async getNotificationSummary() {
     return wait({ role: 'STUDENT', pendingClassRequestCount: 0, unreadFeedbackCount: 0, approvedClasses: [] })
   },
+  async getTeacherResults() {
+    return wait({ content: [], page: 0, size: 12, totalElements: 0, totalPages: 0 })
+  },
 }

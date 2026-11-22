@@ -19,6 +19,7 @@ const PapersPage = lazy(() => import('@/pages/PapersPage'))
 const PaperDetailPage = lazy(() => import('@/pages/PapersPage').then((m) => ({ default: m.PaperDetailPage })))
 const TeacherStudentRequestsPage = lazy(() => import('@/pages/TeacherStudentRequestsPage'))
 const TeacherGradingPage = lazy(() => import('@/pages/TeacherGradingPage'))
+const TeacherResultsPage = lazy(() => import('@/pages/TeacherResultsPage'))
 const UsersPage = lazy(() => import('@/pages/UsersPage'))
 const AdminResultsPage = lazy(() => import('@/pages/AdminResultsPage'))
 const ProfilePage = lazy(() => import('@/pages/ProfilePage'))
@@ -69,6 +70,7 @@ export default function App() {
               <Route path="de-thi/:id" element={<PaperDetailPage />} />
               <Route path="giao-vien/phan-tich" element={<Navigate to="/" replace />} />
               <Route path="giao-vien/cham-thi" element={<TeacherGradingPage />} />
+              <Route path="giao-vien/ket-qua" element={<TeacherResultsPage />} />
             </Route>
 
             <Route element={<TeacherOnlyRoute />}>

@@ -21,6 +21,7 @@ public class GradingQuestionAnswerResponse {
     private String essayAnswer;
     private String referenceAnswer;
     private List<UUID> selectedAnswerIds;
+    private List<AnswerResponse> options;
     private BigDecimal awardedScore;
     private String feedback;
     private Boolean isCorrect;

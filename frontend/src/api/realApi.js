@@ -72,6 +72,7 @@ export const realApi = {
   getTeacherStudentRequests: (params) => unwrap(http.get('/teacher/student-requests', { params })),
   reviewStudentRequest: (requestId, body) => unwrap(http.patch(`/teacher/student-requests/${requestId}`, body)),
   getPendingGrading: (params) => unwrap(http.get('/teacher/grading/pending', { params })),
+  getTeacherResults: (params) => unwrap(http.get('/teacher/results', { params })),
   getGradingAttempt: (attemptId) => unwrap(http.get(`/teacher/grading/attempts/${attemptId}`)),
   gradeAttemptAnswer: (attemptId, attemptAnswerId, body) => unwrap(http.patch(`/teacher/grading/attempts/${attemptId}/answers/${attemptAnswerId}`, body)),
   completeGrading: (attemptId, body) => unwrap(http.patch(`/teacher/grading/attempts/${attemptId}/complete`, body)),

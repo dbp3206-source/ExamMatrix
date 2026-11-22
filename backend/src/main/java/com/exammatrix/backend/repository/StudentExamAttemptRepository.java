@@ -205,4 +205,24 @@ public interface StudentExamAttemptRepository extends JpaRepository<StudentExamA
           AND a.examPaper.examMatrix.examType = com.exammatrix.backend.entity.enums.ExamType.OBJECTIVE
         """)
     List<StudentExamAttempt> findAllCompletedObjectiveAttempts();
+
+    @EntityGraph(attributePaths = {
+        "examPaper",
+        "examPaper.examMatrix",
+        "examPaper.examMatrix.subject",
+        "student",
+        "teacher",
+        "gradedBy",
+        "teacherClass"
+    })
+    @Query("""
+        SELECT DISTINCT a FROM StudentExamAttempt a
+        WHERE a.teacher.id = :teacherId
+           OR a.teacherClass.teacher.id = :teacherId
+           OR a.student.id IN :studentIds
+        """)
+    List<StudentExamAttempt> findTeacherVisibleAttempts(
+            @Param("teacherId") UUID teacherId,
+            @Param("studentIds") Collection<UUID> studentIds
+    );
 }

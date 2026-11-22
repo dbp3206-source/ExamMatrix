@@ -50,6 +50,7 @@ function buildBreadcrumbs(pathname, role) {
     '/de-thi': 'Đề thi & In ấn',
     '/giao-vien/duyet-hoc-sinh': 'Duyệt học sinh',
     '/giao-vien/cham-thi': 'Chấm tự luận',
+    '/giao-vien/ket-qua': 'Theo dõi Kết quả',
     '/nguoi-dung': 'Người dùng',
     '/ket-qua': 'Kết quả',
     '/ho-so': 'Hồ sơ cá nhân',
@@ -125,6 +126,9 @@ export default function MainLayout() {
       items.push({ to: '/giao-vien/duyet-hoc-sinh', label: 'Duyệt học sinh', icon: UserCheck })
     }
     items.push({ to: '/giao-vien/cham-thi', label: 'Chấm tự luận', icon: ClipboardCheck })
+    if (role === 'TEACHER') {
+      items.push({ to: '/giao-vien/ket-qua', label: 'Theo dõi Kết quả', icon: FileBarChart2 })
+    }
     if (role === 'ADMIN') {
       items.push({ to: '/ket-qua', label: 'Kết quả', icon: FileBarChart2 })
       items.push({ to: '/nguoi-dung', label: 'Người dùng', icon: Users })
