@@ -64,7 +64,6 @@ export default function StudentExamsPage() {
       }
     }, 280)
     return () => clearTimeout(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchDraft])
 
   const subjectsQuery = useQuery({
