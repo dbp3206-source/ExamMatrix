@@ -5,6 +5,10 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cache.annotation.CachingConfigurer;
+import org.springframework.cache.interceptor.CacheErrorHandler;
+import org.springframework.cache.interceptor.LoggingCacheErrorHandler;
+import org.springframework.cache.transaction.TransactionAwareCacheManagerProxy;
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -25,7 +29,12 @@ import java.util.Map;
 @Slf4j
 @Configuration
 @EnableCaching
-public class RedisAndCacheConfig {
+public class RedisAndCacheConfig implements CachingConfigurer {
+
+    @Override
+    public CacheErrorHandler errorHandler() {
+        return new LoggingCacheErrorHandler();
+    }
 
     @Value("${app.redis.enabled:true}")
     private boolean redisEnabled;
@@ -51,7 +60,7 @@ public class RedisAndCacheConfig {
     @Bean
     public StringRedisTemplate stringRedisTemplate(ObjectProvider<RedisConnectionFactory> factoryProvider) {
         RedisConnectionFactory factory = factoryProvider.getIfAvailable();
-        if (factory != null && isRedisReachable(redisHost, redisPort)) {
+        if (redisEnabled && factory != null && isRedisReachable(redisHost, redisPort)) {
             return new StringRedisTemplate(factory);
         }
         return null;
@@ -81,6 +90,7 @@ public class RedisAndCacheConfig {
             return RedisCacheManager.builder(factory)
                     .cacheDefaults(defaultConfig)
                     .withInitialCacheConfigurations(cacheConfigs)
+                    .transactionAware()
                     .build();
         } catch (Exception ex) {
             log.warn("Cannot initialize RedisCacheManager ({}). Falling back to In-Memory CacheManager.", ex.getMessage());
@@ -98,6 +108,6 @@ public class RedisAndCacheConfig {
     }
 
     private CacheManager createInMemoryCacheManager() {
-        return new ConcurrentMapCacheManager("subjects", "chapters", "dashboard_summary");
+        return new TransactionAwareCacheManagerProxy(new ConcurrentMapCacheManager("subjects", "chapters", "dashboard_summary"));
     }
 }

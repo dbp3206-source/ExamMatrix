@@ -211,6 +211,7 @@ export function Pagination({ page, totalPages, onChange, className }) {
       <Button
         variant="outline"
         size="sm"
+        aria-label="Trang trước"
         disabled={page <= 0}
         onClick={() => onChange(page - 1)}
         className="h-8 gap-1.5 px-3 text-xs font-medium text-slate-700 hover:bg-slate-50"
@@ -264,6 +265,7 @@ export function Pagination({ page, totalPages, onChange, className }) {
             <span className="text-[11px] font-medium text-slate-500 whitespace-nowrap">Đến trang:</span>
             <input
               type="number"
+              aria-label="Đến trang"
               min={1}
               max={totalPages}
               value={jumpPage}
@@ -288,6 +290,7 @@ export function Pagination({ page, totalPages, onChange, className }) {
       <Button
         variant="outline"
         size="sm"
+        aria-label="Trang sau"
         disabled={page >= totalPages - 1}
         onClick={() => onChange(page + 1)}
         className="h-8 gap-1.5 px-3 text-xs font-medium text-slate-700 hover:bg-slate-50"

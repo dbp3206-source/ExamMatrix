@@ -89,7 +89,7 @@ public class StudentAuthServiceImpl implements StudentAuthService {
                 new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa cấu hình vai trò học sinh"));
         String name = identity.getClaimAsString("name");
         String rawFullName = name == null || name.isBlank() ? email : name.strip();
-        String cleanFullName = rawFullName.replaceAll("[^\\p{L}\\s]", "").replaceAll("\\s+", " ").strip();
+        String cleanFullName = java.text.Normalizer.normalize(rawFullName, java.text.Normalizer.Form.NFC).replaceAll("[^\\p{L}\\p{M} ’'\\-]", "").replaceAll("\\s+", " ").strip();
         if (cleanFullName.isBlank()) {
             cleanFullName = "Học sinh";
         }
@@ -111,6 +111,10 @@ public class StudentAuthServiceImpl implements StudentAuthService {
             candidateUsername = cleanPrefix + "_" + suffix;
             attempts++;
         } while (userRepository.existsByUsernameIgnoreCase(candidateUsername) && attempts < 10);
+
+        if (userRepository.existsByUsernameIgnoreCase(candidateUsername)) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa tạo được tên đăng nhập. Vui lòng thử lại.");
+        }
 
         User student = User.builder()
                 .username(candidateUsername)

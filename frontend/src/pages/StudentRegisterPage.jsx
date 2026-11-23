@@ -316,8 +316,8 @@ export default function StudentRegisterPage() {
                           required: 'Vui lòng nhập họ và tên',
                           maxLength: { value: 100, message: 'Tối đa 100 ký tự' },
                           pattern: {
-                            value: /^[\p{L}\s]{2,100}$/u,
-                            message: 'Họ tên chỉ gồm chữ cái tiếng Việt/Latinh và khoảng trắng, không chứa số hoặc ký tự lạ',
+                            value: /^[\p{L}\p{M} ’'-]{2,100}$/u,
+                            message: 'Dùng chữ cái, khoảng trắng, dấu nối hoặc dấu nháy',
                           },
                         })}
                       />

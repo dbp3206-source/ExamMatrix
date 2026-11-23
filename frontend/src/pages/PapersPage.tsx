@@ -814,7 +814,7 @@ export function PaperDetailPage() {
                     <span className="text-xs text-slate-600"> ({question.points} điểm)</span>
                   )}
                   <strong>:</strong>{' '}
-                  <span className="whitespace-pre-line"><MathRenderer content={question.content} /></span>
+                  <span className="whitespace-pre-line"><MathRenderer content={question.content} inline={false} /></span>
                 </p>
 
                 <div className="paper-meta no-print mt-1 text-[11px] font-medium text-slate-500">

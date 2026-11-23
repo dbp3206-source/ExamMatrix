@@ -78,20 +78,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
             }
         }
 
-        // 5. Anti-stress on exam attempts creation
-        if ("POST".equalsIgnoreCase(method) && uri.contains("/attempts")) {
-            String key = "rl:attempt:" + clientIp;
-            if (!rateLimiterService.tryAcquire(key, 12, Duration.ofMinutes(1))) {
-                rejectRateLimited(response, "Yêu cầu phòng thi đang được xử lý. Vui lòng không nhấn liên tục.");
-                return;
-            }
-        }
-
         filterChain.doFilter(request, response);
     }
 
     private void rejectRateLimited(HttpServletResponse response, String message) throws IOException {
         response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
+        response.setHeader("Retry-After", "60");
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
         String json = String.format("{\"status\":429,\"error\":\"Too Many Requests\",\"message\":\"%s\"}", message);
@@ -99,14 +91,6 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     private String extractClientIp(HttpServletRequest request) {
-        String xf = request.getHeader("X-Forwarded-For");
-        if (xf != null && !xf.isBlank()) {
-            return xf.split(",")[0].trim();
-        }
-        String xr = request.getHeader("X-Real-IP");
-        if (xr != null && !xr.isBlank()) {
-            return xr.trim();
-        }
         return request.getRemoteAddr();
     }
 }

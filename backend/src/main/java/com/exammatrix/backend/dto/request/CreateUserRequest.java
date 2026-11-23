@@ -20,7 +20,7 @@ public class CreateUserRequest {
     @NotBlank(message = "Họ tên không được để trống")
     @Size(min = 2, max = 100, message = "Họ tên phải từ 2 đến 100 ký tự")
     @Pattern(
-        regexp = "^[\\p{L}\\s]+$",
+        regexp = "^[\\p{L}\\p{M} ’'\\-]+$",
         message = "Họ tên chỉ chấp nhận chữ cái và khoảng trắng, không chứa số hoặc ký tự lạ"
     )
     private String fullName;

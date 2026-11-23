@@ -57,7 +57,7 @@ public class UserServiceImpl implements UserService {
             safeSize = 100;
         }
 
-        String normalizedSearch = normalizeFilter(search);
+        String normalizedSearch = com.exammatrix.backend.util.SqlSanitizer.escapeLike(normalizeFilter(search));
 
         String normalizedRole = normalizeFilter(role);
 
@@ -276,7 +276,7 @@ public class UserServiceImpl implements UserService {
             return null;
         }
 
-        return com.exammatrix.backend.util.SqlSanitizer.escapeLike(normalized);
+        return normalized;
     }
 
     private void enforceTargetEditableByCaller(User target) {

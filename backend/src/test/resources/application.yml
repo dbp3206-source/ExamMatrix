@@ -16,6 +16,8 @@ spring:
         format_sql: false
 
 app:
+  redis:
+    enabled: false
   exams:
     expiry-job-enabled: false
   jwt:

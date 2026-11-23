@@ -1139,7 +1139,7 @@ export default function StudentExamTakingPage() {
                 )}
 
                 <div className="text-base leading-relaxed text-slate-900 whitespace-pre-line">
-                  <MathRenderer content={question.content} />
+                  <MathRenderer content={question.content} inline={false} />
                 </div>
 
                 {(question.type === 'SINGLE_CHOICE' || question.type === 'TRUE_FALSE') && (

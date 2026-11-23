@@ -58,7 +58,7 @@ public class SubjectServiceImpl implements SubjectService {
 
     @Override
     @Transactional
-    @CacheEvict(value = "subjects", allEntries = true, beforeInvocation = true)
+    @CacheEvict(value = "subjects", allEntries = true)
     public SubjectResponse createNewSubject(SubjectRequest request) {
         String code = request.getCode()
                 .trim()

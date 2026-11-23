@@ -97,8 +97,8 @@ function UserFormDialog({ onClose }) {
                 {...register('fullName', {
                   required: 'Họ tên là bắt buộc',
                   pattern: {
-                    value: /^[\p{L}\s]{2,100}$/u,
-                    message: 'Họ tên chỉ gồm chữ cái tiếng Việt/Latinh và khoảng trắng, không chứa số hoặc ký tự lạ',
+                    value: /^[\p{L}\p{M} ’'-]{2,100}$/u,
+                    message: 'Dùng chữ cái, khoảng trắng, dấu nối hoặc dấu nháy',
                   },
                 })}
               />

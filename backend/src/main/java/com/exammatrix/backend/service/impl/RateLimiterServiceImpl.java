@@ -8,13 +8,23 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @Service
 public class RateLimiterServiceImpl implements RateLimiterService {
+
+    private static final DefaultRedisScript<Long> INCREMENT_WINDOW = new DefaultRedisScript<>("""
+            local count = redis.call('INCR', KEYS[1])
+            if redis.call('PTTL', KEYS[1]) < 0 then
+                redis.call('PEXPIRE', KEYS[1], ARGV[1])
+            end
+            return count
+            """, Long.class);
 
     private final ObjectProvider<StringRedisTemplate> redisTemplateProvider;
     private final Map<String, InMemoryWindow> inMemoryCounters = new ConcurrentHashMap<>();
@@ -28,10 +38,7 @@ public class RateLimiterServiceImpl implements RateLimiterService {
         StringRedisTemplate redis = redisTemplateProvider.getIfAvailable();
         if (redis != null) {
             try {
-                Long count = redis.opsForValue().increment(key);
-                if (count != null && count == 1) {
-                    redis.expire(key, window);
-                }
+                Long count = redis.execute(INCREMENT_WINDOW, List.of(key), Long.toString(window.toMillis()));
                 return count != null && count <= maxRequests;
             } catch (Exception ex) {
                 log.warn("Redis rate limiter unavailable for key [{}]: {}. Falling back to in-memory limiter.",
