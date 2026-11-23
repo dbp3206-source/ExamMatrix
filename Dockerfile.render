@@ -7,20 +7,19 @@ COPY frontend/ ./
 ENV VITE_API_BASE_URL=/api VITE_USE_MOCK_API=false
 RUN pnpm build
 
-FROM eclipse-temurin:21-jdk-alpine AS backend
+FROM maven:3.9-eclipse-temurin-21@sha256:99e61abcff91a9b1333463bd8451fb18495d6eba9250ac66a338b518f8278320 AS backend
 WORKDIR /app
-COPY backend/.mvn/ .mvn/
-COPY backend/mvnw backend/pom.xml ./
+COPY deploy/render/maven-settings.xml /tmp/maven-settings.xml
+COPY backend/pom.xml ./
 COPY backend/src/ src/
 COPY database/ /schema/
-RUN sed -i 's/\r$//' mvnw && chmod +x mvnw \
-    && mkdir -p src/main/resources/db/render \
+RUN mkdir -p src/main/resources/db/render \
     && for migration in /schema/V*.sql; do \
          case "$migration" in */V4__*) continue ;; esac; \
          sed -E '/^[[:space:]]*(BEGIN|COMMIT);[[:space:]]*$/d' "$migration" \
            > "src/main/resources/db/render/${migration##*/}"; \
        done \
-    && ./mvnw -B -DskipTests package
+    && mvn -B -s /tmp/maven-settings.xml -DskipTests package
 
 FROM eclipse-temurin:21-jre-alpine
 RUN apk add --no-cache bash gettext nginx tini \
