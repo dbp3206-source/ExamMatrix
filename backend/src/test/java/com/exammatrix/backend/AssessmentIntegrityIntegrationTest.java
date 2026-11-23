@@ -359,7 +359,7 @@ class AssessmentIntegrityIntegrationTest {
                 .build());
         String tooLong = "ấ".repeat(25);
         String registration = """
-                {"username":"qa_utf8","email":"qa_utf8@example.com","fullName":"QA UTF8","password":"%s","otp":"123456"}
+                {"username":"qa_utf8","email":"qa_utf8@example.com","fullName":"QA UTF","password":"%s","otp":"123456"}
                 """;
         mockMvc.perform(post("/auth/register/student").contentType("application/json")
                         .content(registration.formatted(tooLong)))

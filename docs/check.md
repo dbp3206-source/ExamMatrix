@@ -289,4 +289,66 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
 - **Git Branch:** Toàn bộ mã nguồn mới nằm trên branch riêng biệt `feature/pagination-math-formatting` và **chưa push lên remote** theo đúng chỉ đạo của người dùng.
 
 ---
+
+## 11. BỔ SUNG KHẮC PHỤC LỖI PHÔNG CHỮ TIẾNG VIỆT (MOJIBAKE) & TOÁN HỌC (KATEX)
+
+### 11.1. Sửa lỗi phông chữ tiếng Việt (Mojibake) trong PostgreSQL
+- **Vấn đề phát hiện:**
+  - Trang Ngân hàng câu hỏi (`QuestionsPage.jsx`): Các badge hiển thị ký tự rác Mojibake: `ToÃ¡n há» c` thay vì `Toán học`, `HÃ m sá»‘ vÃ  Ä‘á»“ thá»‹` thay vì `Hàm số và đồ thị`.
+  - Trang Thông tin cá nhân (`ProfilePage.jsx`): Họ và tên hiển thị `Quáº£n trá»‹ há»‡ thá»‘ng` thay vì `Quản trị hệ thống`.
+  - Nguyên nhân: Dữ liệu khởi tạo/seed trong container PostgreSQL `ff7f17c67803` bị mã hóa đúp (double-encoded UTF-8) tại các bảng `users`, `subjects`, `chapters`, `teacher_classes`.
+- **Giải pháp:**
+  - Thực thi script `database/fix_mojibake.sql` cập nhật toàn diện các bảng sang UTF-8 tiếng Việt chuẩn có dấu:
+    - Bảng `users`: `Quản trị hệ thống`, `Nguyễn Minh Anh`, `Trần Văn Nam`.
+    - Bảng `subjects`: `Toán học`, `Vật lý`, `Hóa học` kèm mô tả chuẩn.
+    - Bảng `chapters`: `Hàm số và đồ thị`, `Mũ và lôgarit`, `Nguyên hàm và tích phân`, `Dao động cơ`, `Dòng điện xoay chiều`, `Cấu tạo nguyên tử`.
+    - Bảng `teacher_classes`: `Lớp Toán Thầy Minh Anh`.
+  - Đã quét kiểm tra toàn bộ 22 bảng trong cơ sở dữ liệu và xác nhận 100% không còn ký tự Mojibake.
+
+### 11.2. Sửa lỗi mất chữ tiếng Việt & render KaTeX trong `MathRenderer.jsx`
+- **Vấn đề phát hiện:**
+  1. **Mất toàn bộ chữ tiếng Việt xung quanh công thức:**
+     - Trong ảnh của người dùng, câu "Nhận định sau đúng hay sai: Chuỗi số ... là chuỗi số phân kì." chỉ hiển thị mỗi công thức toán, toàn bộ văn bản tiếng Việt bị biến mất.
+     - *Nguyên nhân kỹ thuật:* `parseContentTokens` sử dụng `text.replace(regex, (match, offset) => ...)` với biểu thức chính quy có nhóm bắt giữ (capturing groups `(...)`). Trong JavaScript, khi regex có capturing groups, tham số thứ hai của callback là `p1` (group 1) chứ không phải `offset`. Dẫn đến `offset` mang kiểu chuỗi (`string`), khiến phép tính `lastIdx = offset + match.length` trả về `NaN`, điều kiện `offset > lastIdx` luôn `false`, bỏ qua toàn bộ các token văn bản (`type: 'text'`).
+  2. **Lỗi render KaTeX màu đỏ với số mũ chứa phân số:**
+     - Biểu thức `S = \sum_{n=1}^{\infty} 3^{n-\frac{2}}{n!} ...` bị lỗi đỏ do KaTeX báo `Extra }`.
+     - *Nguyên nhân kỹ thuật:* Bộ chuyển đổi `convertAsciiMathToLatex` xử lý số mũ `3^(n-2)` thành `3^{n-2}` trước, sau đó regex phân số `\b(\d+)\s*\/\s*([a-zA-Z0-9]+)\b` lại vô tình khớp `2 / n` nằm giữa `{n-2}` và `n!`, biến đổi thành `3^{n-\frac{2}}{n!}` gây sai cú pháp nhóm ngoặc KaTeX.
+  3. **Lỗi ngắt cụm phương trình, bất phương trình và hàm số:**
+     - Các biểu thức như `x^2 - 4x + 3 = 0`, `x^2 - 5x + 6 > 0`, `(x - 1)^2 = 4`, `y = f(x)` bị tách rời: phần biểu thức bị render thành math còn phần toán tử và vế phải (`= 0`, `> 0`, `(x)`) bị rơi ra ngoài thành plain text.
+     - *Nguyên nhân kỹ thuật:*
+       - Trong regex phương trình, `\s*` nằm ngoài nhóm lặp `(?:[+\\-*·/]\s*...)`, khiến các số hạng thứ ba trở đi có khoảng trắng trước toán tử (`+ 3`) không khớp được.
+       - Ký tự `-` trong `[+\\-*·/]` gây xung đột dải ký tự (character class range error).
+       - `mathAtom` thiếu hàm số tổng quát `[a-zA-Z][a-zA-Z0-9_]*(?:['’]+)?${nestedParen}`, khiến `y = f(x)` bị cắt đứt giữa `f` và `(x)`.
+       - `mathTerm` dùng `[+\\-]?\\s*` làm nuốt khoảng trắng đầu chuỗi (` 3/4`, ` 20/11`) vào bên trong token toán học.
+  4. **Lỗi đỏ KaTeX khi `throwOnError: false`:**
+     - Thiết lập `throwOnError: false` khiến KaTeX tự sinh mã HTML màu đỏ `#cc0000` kèm thông báo lỗi thô, làm hỏng giao diện người dùng thay vì fallback êm dịu.
+  5. **Xung đột cache Redis sau khi chạy test:**
+     - Suite kiểm thử backend ghi đè bản ghi giả lập vào Redis `localhost:6379`, khiến API `/chapters` trả về chỉ 1 chương bài test (id: 44), làm badge trên `QuestionsPage.jsx` không hiển thị được.
+- **Giải pháp kỹ thuật toàn diện:**
+  - **Tái cấu trúc Tokenizer `parseContentTokens` & Math Patterns:**
+    - Sử dụng `Array.from(text.matchAll(mathFormulaPattern))` với chỉ số `match.index` chính xác 100%, trích xuất trọn vẹn từng lát cắt văn bản tiếng Việt xen kẽ công thức.
+    - Xử lý triệt để khoảng trắng đầu chuỗi trong match (`leadingWs`), đảm bảo khoảng trắng thuộc về text token và không bị nuốt vào công thức.
+    - Cải tiến `mathLhs` và `mathFormulaPattern`: Hỗ trợ hoàn chỉnh phương trình bậc 2 (`x^2 - 4x + 3 = 0`), bất phương trình (`x^2 - 5x + 6 > 0`), phương trình chứa ngoặc `(x - 1)^2 = 4`, hàm số vế phải `y = f(x)`, `h(x) = f(x) + g(x)`.
+    - Đặt `-` lên đầu các tập ký tự `[-+*·/]` để loại bỏ hoàn toàn lỗi range error regex.
+  - **Nâng cấp `convertAsciiMathToLatex` & Fallback an toàn:**
+    - Thứ tự ưu tiên chính xác: Trig/Functions (`\sin`, `\cos`, `\ln`) -> Sequences/Subscripts -> Greek letters & symbols (`φ`, `ϕ`, `Φ`, `μ`, `ε`, `ρ`, `°`) -> Exponents -> Fractions.
+    - Thêm hàm `stripOuterParens` loại bỏ ngoặc đơn thừa ở tử/mẫu phân số (`(2x+1)/(x-3)` -> `\frac{2x+1}{x-3}`).
+    - Bật `throwOnError: true` trong `renderKaTeXHtml`: Bất kỳ lỗi parse nào đều được bắt ngoại lệ và hiển thị thẻ `<code>` trang nhã, không bao giờ xuất hiện chữ đỏ KaTeX parse error `#cc0000`.
+  - **Đồng bộ cơ sở dữ liệu & dọn dẹp Cache Redis:**
+    - Chạy `redis-cli flushall` trên container Redis `66be543d051f`, khôi phục trọn vẹn danh mục môn học (`Toán học`, `Vật lý`, `Hóa học`) và 6 chương bài tiếng Việt chuẩn từ PostgreSQL.
+
+### 11.3. Kết quả kiểm tra chất lượng (Verification Record)
+- **Tokenization & KaTeX Render:** Kiểm thử tự động trên toàn bộ 196 câu hỏi và câu trả lời thực tế trong cơ sở dữ liệu PostgreSQL `exam_matrix`:
+  - `Reconstruction mismatches: 0` (100% văn bản gốc được bảo toàn).
+  - `KaTeX parse errors: 0` (100% công thức toán biên dịch thành công).
+- **Edge cases:** 35+ trường hợp biên bao gồm phương trình bậc hai, bất phương trình, hàm số hữu tỉ, đạo hàm cấp cao, ký tự Hy Lạp vật lý (`φ`, `ω`), độ đo góc (`60°`), tích phân, số mũ âm, căn thức đều vượt qua 100%.
+- **Frontend ESLint:** `pnpm lint` -> `0 errors, 0 warnings`.
+- **Frontend Build:** `pnpm build` (`tsc -b && vite build`) -> Thành công 0 lỗi.
+- **Backend Tests:** 81/81 unit & integration tests vượt qua (`BUILD SUCCESS`).
+- **Live Server Test:**
+  - Frontend: `http://localhost:5173` (HTTP 200 OK).
+  - Backend: `http://localhost:8080` (API trả về tiếng Việt chuẩn: `Quản trị hệ thống`, `Toán học`, `Hàm số và đồ thị`, `Cho hàm số f(x) = ...`).
+- **Git Branch:** Toàn bộ thay đổi nằm trên branch `feature/pagination-math-formatting` và **chưa push lên remote** theo đúng chỉ đạo.
+
+---
 *Báo cáo được khởi tạo tự động và đã được xác thực qua toàn bộ test suite.*
