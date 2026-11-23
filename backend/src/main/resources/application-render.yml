@@ -1,7 +1,11 @@
 server:
   address: 127.0.0.1
   port: 8081
+  forward-headers-strategy: native
   tomcat:
+    remoteip:
+      remote-ip-header: X-ExamMatrix-Client-IP
+      protocol-header: X-Forwarded-Proto
     threads:
       max: 24
       min-spare: 2

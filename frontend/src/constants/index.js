@@ -237,6 +237,23 @@ const DEFAULT_SUBJECT_PRESET = {
   iconBgClass: 'bg-slate-100 text-slate-700',
 }
 
+const SPECIAL_SUBJECT_PRESETS = [
+  ['calculus', 'Sigma', 'MATH', /\b(gt\d*|giai tich)\b/],
+  ['discrete-math', 'Waypoints', 'MATH', /\b(trr\d*|toan roi rac)\b/],
+  ['networking', 'Network', 'ENG', /\b(mmt|mang may tinh)\b/],
+  ['intellectual-property', 'Scale', 'HIST', /\b(plshtt|so huu tri tue)\b/],
+  ['scientific-socialism', 'UsersRound', 'LIT', /\b(cnxhkh|chu nghia xa hoi khoa hoc)\b/],
+  ['statistics', 'ChartColumn', 'PHYS', /\b(xstk|xac suat|thong ke)\b/],
+  ['philosophy', 'Lightbulb', 'HIST', /\b(thmln|triet hoc)\b/],
+  ['operating-systems', 'Terminal', 'CS', /\b(hdh|he dieu hanh)\b/],
+  ['databases', 'Database', 'CHEM', /\b(csdl|co so du lieu)\b/],
+  ['political-economy', 'Coins', 'HIST', /\b(ktct|kinh te chinh tri)\b/],
+  ['econometrics', 'ChartScatter', 'BIO', /\b(ktl|kinh te luong)\b/],
+].map(([key, iconName, palette, pattern]) => ({
+  pattern,
+  preset: { ...SUBJECT_PRESETS[palette], key, iconName },
+}))
+
 function normalizeText(value) {
   return String(value || '')
     .normalize('NFD')
@@ -249,9 +266,11 @@ function normalizeText(value) {
 export function getSubjectPreset(codeOrName, optionalName = '') {
   const combined = `${normalizeText(codeOrName)} ${normalizeText(optionalName)}`.trim()
   if (!combined) return DEFAULT_SUBJECT_PRESET
+  const special = SPECIAL_SUBJECT_PRESETS.find(({ pattern }) => pattern.test(combined))
+  if (special) return special.preset
   if (/\b(math|toan|giai tich|dai so|hinh hoc)\b/.test(combined) || combined.includes('toan')) return SUBJECT_PRESETS.MATH
   if (/\b(phys|vat ly|vatli|ly)\b/.test(combined) || combined.includes('vat ly')) return SUBJECT_PRESETS.PHYS
-  if (/\b(chem|hoa hoc|hoa)\b/.test(combined) || combined.includes('hoa')) return SUBJECT_PRESETS.CHEM
+  if (/\b(chem|hoa hoc|hoa)\b/.test(combined)) return SUBJECT_PRESETS.CHEM
   if (/\b(bio|sinh hoc|sinh)\b/.test(combined) || combined.includes('sinh')) return SUBJECT_PRESETS.BIO
   if (/\b(hist|lich su|su)\b/.test(combined) || combined.includes('lich su')) return SUBJECT_PRESETS.HIST
   if (/\b(eng|tieng anh|anh van|ngoai ngu)\b/.test(combined) || combined.includes('tieng anh')) return SUBJECT_PRESETS.ENG
