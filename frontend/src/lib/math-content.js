@@ -1,3 +1,5 @@
+import { readLegacyFormula } from './legacy-math.js'
+
 /**
  * Normalizes ASCII / Unicode mathematical text into clean LaTeX markup.
  */
@@ -18,8 +20,6 @@ export function convertAsciiMathToLatex(expr) {
   s = s.replace(/₁/g, '_1')
   s = s.replace(/₂/g, '_2')
   s = s.replace(/ₐ/g, '_a')
-  s = s.replace(/∫₀¹/g, '\\int_{0}^{1} ')
-
   // 1. Summations: Σ(n=1..∞), Σ(n=1->∞), Σ(n=1...oo)
   s = s.replace(/Σ\s*\(\s*([a-zA-Z])\s*=\s*(\d+|\w+)\s*(?:\.{2,3}|->)\s*(∞|oo|inf(?:inity)?|\w+)\s*\)/g, (m, v, from, to) => {
     const toTex = (to === '∞' || to === 'oo' || to.startsWith('inf')) ? '\\infty' : to
@@ -121,7 +121,8 @@ function stripOuterParens(str) {
 }
 
 // Treat ambiguous prose as plain text. Detect standalone, unambiguous legacy notation.
-const legacyMath = /(?<![\p{L}\p{N}_./])(?:∫₀¹(?=\s|$)|[a-zA-Z][²³⁴ⁿˣᵃ](?![\p{L}\p{N}])|[α-ωΑ-Ω](?![\p{L}\p{N}])|\d+(?:\.\d+)?\s*\/\s*\d+(?:\.\d+)?(?![\p{L}\p{N}./]))/gu
+const legacyMath = /(?<![\p{L}\p{N}_./])(?:∫₀¹(?=\s|$)|[a-zA-Z][²³⁴ⁿˣᵃ](?![\p{L}\p{N}])|[α-ωΑ-Ω](?![\p{L}\p{N}])|\d+(?:\.\d+)?\s*\/\s*\d+(?:\.\d+)?(?![\p{L}\p{N}./]))/uy
+const formulaStart = /(?<![\p{L}\p{M}\p{N}_./^])(?=[Σ∑∫√|([{a-zA-Zα-ωΑ-Ω0-9])/gu
 
 export function parseContentTokens(text) {
   if (!text || typeof text !== 'string') return []
@@ -129,10 +130,15 @@ export function parseContentTokens(text) {
   const tokens = []
   const appendLegacy = (value) => {
     let cursor = 0
-    for (const match of value.matchAll(legacyMath)) {
-      if (match.index > cursor) tokens.push({ type: 'text', value: value.slice(cursor, match.index) })
-      tokens.push({ type: 'ascii-math', value: match[0] })
-      cursor = match.index + match[0].length
+    for (const { index } of value.matchAll(formulaStart)) {
+      if (index < cursor) continue
+      legacyMath.lastIndex = index
+      const formula = readLegacyFormula(value, index)
+      const fallback = formula ? null : legacyMath.exec(value)?.[0]
+      if (!formula && !fallback) continue
+      if (index > cursor) tokens.push({ type: 'text', value: value.slice(cursor, index) })
+      tokens.push({ type: 'ascii-math', ...(formula ?? { value: fallback }) })
+      cursor = index + (formula?.value ?? fallback).length
     }
     if (cursor < value.length) tokens.push({ type: 'text', value: value.slice(cursor) })
   }

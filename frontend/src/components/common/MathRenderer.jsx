@@ -44,7 +44,7 @@ export function MathRenderer({ content, enabled = true, className = '', inline =
           return <span key={index}>{token.value}</span>
         }
 
-        const latex = token.type === 'ascii-math' ? convertAsciiMathToLatex(token.value) : token.value
+        const latex = token.latex ?? (token.type === 'ascii-math' ? convertAsciiMathToLatex(token.value) : token.value)
         const isDisplay = Boolean(token.display) && !inline
         const html = renderKaTeXHtml(latex, isDisplay)
 
