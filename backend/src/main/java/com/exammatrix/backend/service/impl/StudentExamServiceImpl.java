@@ -64,11 +64,21 @@ public class StudentExamServiceImpl implements StudentExamService {
 
         List<StudentExamSummaryResponse> responses = paperPage.getContent().stream()
                 .map(paper -> {
-                    Optional<StudentExamAttempt> attemptOpt = attemptRepository
-                            .findByStudent_IdAndExamPaper_Id(student.getId(), paper.getId());
+                    List<StudentExamAttempt> attempts = attemptRepository
+                            .findByStudent_IdAndExamPaper_IdOrderByAttemptNumberDescStartedAtDesc(
+                                    student.getId(), paper.getId());
+
+                    Optional<StudentExamAttempt> attemptOpt = attempts.stream()
+                            .filter(a -> a.getStatus() == AttemptStatus.IN_PROGRESS)
+                            .findFirst()
+                            .or(() -> attempts.stream()
+                                    .filter(a -> a.getStatus() != AttemptStatus.CANCELLED)
+                                    .findFirst())
+                            .or(() -> attempts.stream().findFirst());
 
                     AttemptStatus attemptStatus = attemptOpt.map(StudentExamAttempt::getStatus).orElse(null);
                     UUID attemptId = attemptOpt.map(StudentExamAttempt::getId).orElse(null);
+                    Integer attemptNumber = attemptOpt.map(StudentExamAttempt::effectiveAttemptNumber).orElse(null);
                     BigDecimal scoreOnTen = attemptOpt
                             .filter(a -> a.getStatus() == AttemptStatus.COMPLETED)
                             .map(a -> scoreScaleService.normalizeToTen(a.getScore(), a.getMaxScore(), a.getScoreOnTen()))
@@ -88,6 +98,8 @@ public class StudentExamServiceImpl implements StudentExamService {
                             .accessType(paper.getAccessType())
                             .attemptStatus(attemptStatus)
                             .attemptId(attemptId)
+                            .attemptNumber(attemptNumber)
+                            .attemptCount(attempts.size())
                             .scoreOnTen(scoreOnTen)
                             .publishedAt(paper.getPublishedAt() != null ? paper.getPublishedAt() : paper.getCreatedAt())
                             .createdAt(paper.getCreatedAt())
@@ -165,6 +177,12 @@ public class StudentExamServiceImpl implements StudentExamService {
     @Override
     @Transactional(noRollbackFor = ResponseStatusException.class)
     public StartAttemptResponse startAttempt(UUID paperId) {
+        return startAttempt(paperId, false);
+    }
+
+    @Override
+    @Transactional(noRollbackFor = ResponseStatusException.class)
+    public StartAttemptResponse startAttempt(UUID paperId, boolean forceNew) {
         User student = currentUserService.getCurrentUserForUpdate();
         ExamPaper paper = examPaperRepository.findByIdForAttemptStart(paperId).orElseThrow(() ->
                 new ResponseStatusException(HttpStatus.NOT_FOUND, "Không tìm thấy đề thi"));
@@ -174,30 +192,43 @@ public class StudentExamServiceImpl implements StudentExamService {
         ExamMatrix matrix = paper.getExamMatrix();
         int durationMinutes = matrix.getDuration();
 
-        Optional<StudentExamAttempt> existingOpt = attemptRepository
-                .findForStart(student.getId(), paper.getId());
+        List<StudentExamAttempt> existingAttempts = attemptRepository
+                .findForStartList(student.getId(), paper.getId());
 
-        if (existingOpt.isPresent()) {
-            StudentExamAttempt existing = existingOpt.get();
-            if (existing.getStatus() == AttemptStatus.IN_PROGRESS) {
-                long elapsed = Duration.between(existing.getStartedAt(), LocalDateTime.now()).getSeconds();
-                long remaining = Math.max(0, (durationMinutes * 60L) - elapsed);
-                if (remaining <= 0) {
-                    submitInternal(existing);
+        int maxAttemptNumber = existingAttempts.stream()
+                .mapToInt(StudentExamAttempt::effectiveAttemptNumber)
+                .max()
+                .orElse(0);
+
+        Optional<StudentExamAttempt> inProgressOpt = existingAttempts.stream()
+                .filter(a -> a.getStatus() == AttemptStatus.IN_PROGRESS)
+                .findFirst();
+
+        if (inProgressOpt.isPresent()) {
+            StudentExamAttempt existing = inProgressOpt.get();
+            long elapsed = Duration.between(existing.getStartedAt(), LocalDateTime.now()).getSeconds();
+            long remaining = Math.max(0, (durationMinutes * 60L) - elapsed);
+            if (remaining <= 0) {
+                submitInternal(existing);
+                if (!forceNew) {
                     throw new ResponseStatusException(HttpStatus.CONFLICT, "Đã hết thời gian làm bài thi");
                 }
+            } else if (!forceNew) {
                 return StartAttemptResponse.builder()
                         .attemptId(existing.getId())
+                        .attemptNumber(existing.effectiveAttemptNumber())
                         .startedAt(existing.getStartedAt())
                         .durationMinutes(durationMinutes)
                         .remainingSeconds(remaining)
                         .status(existing.getStatus())
                         .build();
-            } else if (existing.getStatus() == AttemptStatus.CANCELLED) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "Lượt làm bài đã bị hủy");
             } else {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "Bạn đã hoàn thành bài thi này và không thể làm lại");
+                existing.setStatus(AttemptStatus.CANCELLED);
+                attemptRepository.save(existing);
             }
+        } else if (!forceNew && !existingAttempts.isEmpty()
+                && existingAttempts.get(0).getStatus() == AttemptStatus.CANCELLED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Lượt làm bài đã bị hủy");
         }
 
         BigDecimal maxScore = paper.getPaperQuestions().stream()
@@ -216,12 +247,14 @@ public class StudentExamServiceImpl implements StudentExamService {
                     .orElse(null);
         }
 
+        int nextAttemptNumber = maxAttemptNumber + 1;
         StudentExamAttempt attempt = StudentExamAttempt.builder()
                 .examPaper(paper)
                 .student(student)
                 .teacher(matrix.getTeacher())
                 .teacherClass(snapshotClass)
                 .status(AttemptStatus.IN_PROGRESS)
+                .attemptNumber(nextAttemptNumber)
                 .startedAt(LocalDateTime.now())
                 .maxScore(maxScore.compareTo(BigDecimal.ZERO) > 0 ? maxScore : BigDecimal.valueOf(10))
                 .build();
@@ -230,6 +263,7 @@ public class StudentExamServiceImpl implements StudentExamService {
 
         return StartAttemptResponse.builder()
                 .attemptId(saved.getId())
+                .attemptNumber(saved.effectiveAttemptNumber())
                 .startedAt(saved.getStartedAt())
                 .durationMinutes(durationMinutes)
                 .remainingSeconds(durationMinutes * 60L)
@@ -516,6 +550,7 @@ public class StudentExamServiceImpl implements StudentExamService {
 
         return StudentAttemptResultResponse.builder()
                 .attemptId(attempt.getId())
+                .attemptNumber(attempt.effectiveAttemptNumber())
                 .paperId(paper.getId())
                 .examCode(paper.getExamCode())
                 .paperTitle(matrix.getTitle())

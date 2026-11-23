@@ -28,6 +28,7 @@ public record TeacherResultRowResponse(
         LocalDateTime submittedAt,
         LocalDateTime gradedAt,
         String gradedByName,
-        String relationLabel
+        String relationLabel,
+        Integer attemptNumber
 ) {
 }

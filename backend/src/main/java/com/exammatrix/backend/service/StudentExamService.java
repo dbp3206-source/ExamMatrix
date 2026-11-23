@@ -23,6 +23,8 @@ public interface StudentExamService {
 
     StartAttemptResponse startAttempt(UUID paperId);
 
+    StartAttemptResponse startAttempt(UUID paperId, boolean forceNew);
+
     void saveAnswer(UUID attemptId, SaveAttemptAnswerRequest request);
 
     StudentAttemptResultResponse submitAttempt(UUID attemptId);

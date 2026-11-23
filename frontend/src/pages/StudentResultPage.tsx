@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Ban, CheckCircle2, Clock, RefreshCw, XCircle } from 'lucide-react'
+import { ArrowLeft, Ban, CheckCircle2, Clock, RefreshCw, RotateCcw, XCircle } from 'lucide-react'
 import { api } from '@/api/service'
 import { attemptStatusMeta, examTypeLabel, scoreCardTone, typeLabel } from '@/constants'
 import { classifyAttemptStatus } from '@/utils/examAttemptStatus'
@@ -95,12 +95,20 @@ export default function StudentResultPage() {
         accent="teal"
         eyebrow="Kết quả bài thi"
         title="Bảng điểm & Chi tiết bài làm"
-        description={`Chi tiết lượt thi: ${result.paperTitle || 'Bài kiểm tra'}`}
+        description={`Chi tiết lượt thi: ${result.paperTitle || 'Bài kiểm tra'} (Lần ${result.attemptNumber || 1})`}
         action={
-          <Button variant="outline" onClick={() => navigate('/hoc-sinh/de-thi')}>
-            <ArrowLeft className="h-4 w-4" />
-            Danh sách đề thi
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {result.paperId && (
+              <Button variant="teal" onClick={() => navigate(`/hoc-sinh/lam-bai/${result.paperId}?forceNew=1`)}>
+                <RotateCcw className="h-4 w-4" />
+                Làm lại bài thi
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => navigate('/hoc-sinh/de-thi')}>
+              <ArrowLeft className="h-4 w-4" />
+              Danh sách đề thi
+            </Button>
+          </div>
         }
       />
 
@@ -108,10 +116,13 @@ export default function StudentResultPage() {
         <CardContent className="space-y-5 p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-2">
-              <h2 className="text-xl font-bold text-slate-900">{result.paperTitle}</h2>
+              <h2 className="text-xl font-bold text-slate-900">
+                {result.paperTitle} (Lần {result.attemptNumber || 1})
+              </h2>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="indigo">{examTypeLabel(result.examType)}</Badge>
                 <Badge variant={meta.tone}>{meta.label}</Badge>
+                <Badge variant="neutral">Lần {result.attemptNumber || 1}</Badge>
                 {result.examCode && <Badge variant="neutral">Mã đề #{result.examCode}</Badge>}
               </div>
             </div>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, Clock, RefreshCw, RotateCcw, Send } from 'lucide-react'
 import { toast } from 'sonner'
@@ -110,6 +110,8 @@ export default function StudentExamTakingPage() {
   const auth = useAuth() as { user?: { id?: string } | null } | null
   const currentUserId = auth?.user?.id ? String(auth.user.id) : ''
   const { paperId } = useParams<{ paperId: string }>()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const forceNew = searchParams.get('forceNew') === '1'
   const navigate = useNavigate()
   const locationState = (useLocation().state as LocationState | null) ?? null
   const knownAttemptId = locationState?.attemptId
@@ -554,7 +556,13 @@ export default function StudentExamTakingPage() {
     setSessionError(null)
     setUnknownStatusNotice(null)
     try {
-      const started = (await api.startExamAttempt(paperId as string)) as StartExamAttemptResponse
+      const started = (await api.startExamAttempt(
+        paperId as string,
+        forceNew ? { forceNew: true } : undefined
+      )) as StartExamAttemptResponse
+      if (forceNew) {
+        setSearchParams({}, { replace: true })
+      }
       const deadline = examDeadline(started?.remainingSeconds, performance.now())
       if (!started?.attemptId) throw new Error('Máy chủ không trả mã lượt làm bài.')
       const result = (await api.getAttemptResult(started.attemptId)) as AttemptResultResponse
@@ -628,13 +636,19 @@ export default function StudentExamTakingPage() {
       setSessionError(error)
       setSessionStatus('error')
     }
-  }, [applyServerResultSnapshot, cancelAllPendingRetries, knownAttemptId, navigate, paperId, updateAttemptStatus])
+  }, [applyServerResultSnapshot, cancelAllPendingRetries, forceNew, knownAttemptId, navigate, paperId, setSearchParams, updateAttemptStatus])
 
   const syncServerTimer = useCallback(async () => {
     if (!attemptId || timerSyncInFlightRef.current || submitInFlightRef.current || !isInProgressAttemptStatus(attemptStatusRef.current)) return
     timerSyncInFlightRef.current = true
     try {
-      const started = (await api.startExamAttempt(paperId as string)) as StartExamAttemptResponse
+      const started = (await api.startExamAttempt(
+        paperId as string,
+        forceNew ? { forceNew: true } : undefined
+      )) as StartExamAttemptResponse
+      if (forceNew) {
+        setSearchParams({}, { replace: true })
+      }
       if (started?.attemptId !== attemptId) throw new Error('Mã lượt làm bài đã thay đổi.')
       if (submitInFlightRef.current) return
       const outcome = classifyAttemptStatus(started?.status)

@@ -821,7 +821,7 @@ function StudentDashboardWorkspace({ analytics, onRefresh, isFetching }) {
       .map((item, idx) => ({
         index: idx + 1,
         code: item.examCode ? `#${item.examCode}` : `Lượt ${idx + 1}`,
-        title: item.paperTitle || 'Bài thi',
+        title: `${item.paperTitle || 'Bài thi'} (Lần ${item.attemptNumber || 1})`,
         subjectName: item.subjectName || '',
         scoreOnTen: Number(item.scoreOnTen),
       }))
@@ -979,7 +979,9 @@ function StudentDashboardWorkspace({ analytics, onRefresh, isFetching }) {
                             return (
                               <TableRow key={item.attemptId}>
                                 <TableCell>
-                                  <div className="font-medium text-slate-900">{item.paperTitle}</div>
+                                  <div className="font-medium text-slate-900">
+                                    {item.paperTitle} (Lần {item.attemptNumber || 1})
+                                  </div>
                                   <div className="text-xs text-slate-500">Mã {item.examCode}</div>
                                 </TableCell>
                                 <TableCell className="text-slate-700">{item.subjectName}</TableCell>

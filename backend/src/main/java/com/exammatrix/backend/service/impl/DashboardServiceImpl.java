@@ -622,7 +622,8 @@ public class DashboardServiceImpl implements DashboardService {
                             completed ? attempt.getScore() : null,
                             attempt.getMaxScore(),
                             onTen,
-                            attempt.getStartedAt(), attempt.getSubmittedAt(), attempt.getGradedAt()
+                            attempt.getStartedAt(), attempt.getSubmittedAt(), attempt.getGradedAt(),
+                            attempt.effectiveAttemptNumber()
                     );
                 })
                 .toList();

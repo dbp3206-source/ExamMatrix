@@ -390,4 +390,61 @@ class StudentOtpSessionAndRankingIntegrationTest {
         assertEquals(0, board.get(1).highestScore().compareTo(new BigDecimal("8.50")));
         assertEquals(-1, board.get(1).rankDelta());
     }
+
+    @Test
+    @DisplayName("Student can retake completed or in-progress exams with incremented attemptNumber")
+    void testRetakeCompletedAndInProgressExams() throws Exception {
+        User retakeStudent = userRepository.save(User.builder()
+                .username("retake_student").email("retake@test.com").fullName("Học Sinh Làm Lại")
+                .password(passwordEncoder.encode("Pass1234!")).role(studentRole).status(UserStatus.ACTIVE).build());
+        String studentBearer = "Bearer " + jwtService.generateToken(retakeStudent);
+
+        MvcResult firstRes = mockMvc.perform(post("/student/exams/" + publicPaper.getId() + "/attempts")
+                .header(HttpHeaders.AUTHORIZATION, studentBearer))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.attemptNumber").value(1))
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"))
+                .andReturn();
+        String attempt1Id = objectMapper.readTree(firstRes.getResponse().getContentAsString())
+                .get("attemptId").asText();
+
+        MvcResult retakeInProgressRes = mockMvc.perform(post("/student/exams/" + publicPaper.getId() + "/attempts?forceNew=true")
+                .header(HttpHeaders.AUTHORIZATION, studentBearer))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.attemptNumber").value(2))
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"))
+                .andReturn();
+        String attempt2Id = objectMapper.readTree(retakeInProgressRes.getResponse().getContentAsString())
+                .get("attemptId").asText();
+        assertNotEquals(attempt1Id, attempt2Id);
+        assertEquals(AttemptStatus.CANCELLED, attemptRepository.findById(java.util.UUID.fromString(attempt1Id)).orElseThrow().getStatus());
+
+        mockMvc.perform(post("/student/attempts/" + attempt2Id + "/submit")
+                .header(HttpHeaders.AUTHORIZATION, studentBearer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.attemptNumber").value(2))
+                .andExpect(jsonPath("$.status").value("COMPLETED"));
+
+        MvcResult retakeCompletedRes = mockMvc.perform(post("/student/exams/" + publicPaper.getId() + "/attempts?forceNew=true")
+                .header(HttpHeaders.AUTHORIZATION, studentBearer))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.attemptNumber").value(3))
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"))
+                .andReturn();
+        String attempt3Id = objectMapper.readTree(retakeCompletedRes.getResponse().getContentAsString())
+                .get("attemptId").asText();
+        assertNotEquals(attempt2Id, attempt3Id);
+        assertEquals(AttemptStatus.COMPLETED, attemptRepository.findById(java.util.UUID.fromString(attempt2Id)).orElseThrow().getStatus());
+
+        mockMvc.perform(get("/student/exams")
+                .header(HttpHeaders.AUTHORIZATION, studentBearer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].attemptNumber").value(3))
+                .andExpect(jsonPath("$.content[0].attemptCount").value(3));
+
+        mockMvc.perform(get("/dashboard/analytics")
+                .header(HttpHeaders.AUTHORIZATION, studentBearer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.studentAttempts", hasSize(3)));
+    }
 }

@@ -37,6 +37,7 @@ interface TeacherResultRow {
   paperTitle: string
   examCode: string
   examType: 'OBJECTIVE' | 'ESSAY'
+  attemptNumber?: number
   status: 'IN_PROGRESS' | 'WAITING_GRADING' | 'COMPLETED' | 'CANCELLED' | string
   scoreOnTen: number | null
   rawScore: number | null
@@ -82,6 +83,7 @@ interface GradingAttemptDetail {
   attemptId: string
   paperId: string
   paperTitle: string
+  attemptNumber?: number
   studentId: string
   studentName: string
   studentEmail: string
@@ -330,7 +332,7 @@ export default function TeacherResultsPage() {
                           </div>
                         </td>
                         <td className="px-4 py-3 align-top">
-                          <div className="font-semibold text-slate-900">{row.paperTitle}</div>
+                          <div className="font-semibold text-slate-900">{row.paperTitle} (Lần {row.attemptNumber || 1})</div>
                           <div className="mt-0.5 text-xs text-slate-500">
                             {row.subjectName} · Mã đề <span className="font-mono font-semibold text-slate-700">{row.examCode}</span>
                           </div>
@@ -441,7 +443,7 @@ export default function TeacherResultsPage() {
                       </div>
                       <div className="space-y-1">
                         <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Bài kiểm tra</div>
-                        <div className="text-sm font-semibold text-slate-900">{d.paperTitle}</div>
+                        <div className="text-sm font-semibold text-slate-900">{d.paperTitle} (Lần {d.attemptNumber || 1})</div>
                         <div className="flex flex-wrap gap-1.5 pt-0.5">
                           <Badge variant={d.examType === 'ESSAY' ? 'warning' : 'indigo'}>{examTypeLabel(d.examType)}</Badge>
                           <Badge variant={st.tone as any}>{st.label}</Badge>

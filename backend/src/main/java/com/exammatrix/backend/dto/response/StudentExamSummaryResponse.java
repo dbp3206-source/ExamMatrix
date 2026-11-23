@@ -25,6 +25,8 @@ public class StudentExamSummaryResponse {
     private ExamAccessType accessType;
     private AttemptStatus attemptStatus;
     private UUID attemptId;
+    private Integer attemptNumber;
+    private long attemptCount;
     private java.math.BigDecimal scoreOnTen;
     private LocalDateTime publishedAt;
     private LocalDateTime createdAt;

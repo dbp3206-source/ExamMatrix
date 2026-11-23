@@ -43,8 +43,11 @@ public class StudentExamController {
     }
 
     @PostMapping("/exams/{paperId}/attempts")
-    public ResponseEntity<StartAttemptResponse> startAttempt(@PathVariable UUID paperId) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(studentExamService.startAttempt(paperId));
+    public ResponseEntity<StartAttemptResponse> startAttempt(
+            @PathVariable UUID paperId,
+            @RequestParam(defaultValue = "false") boolean forceNew
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(studentExamService.startAttempt(paperId, forceNew));
     }
 
     @PatchMapping("/attempts/{attemptId}/answers")

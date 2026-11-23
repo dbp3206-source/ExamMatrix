@@ -26,8 +26,11 @@ public interface StudentExamAttemptRepository extends JpaRepository<StudentExamA
     Optional<StudentExamAttempt> findByIdForUpdate(@Param("id") UUID id);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select a from StudentExamAttempt a where a.student.id = :studentId and a.examPaper.id = :paperId")
-    Optional<StudentExamAttempt> findForStart(@Param("studentId") UUID studentId, @Param("paperId") UUID paperId);
+    @Query("select a from StudentExamAttempt a where a.student.id = :studentId and a.examPaper.id = :paperId order by a.attemptNumber desc, a.startedAt desc")
+    List<StudentExamAttempt> findForStartList(@Param("studentId") UUID studentId, @Param("paperId") UUID paperId);
+
+    @EntityGraph(attributePaths = {"examPaper", "examPaper.examMatrix", "examPaper.examMatrix.subject"})
+    List<StudentExamAttempt> findByStudent_IdAndExamPaper_IdOrderByAttemptNumberDescStartedAtDesc(UUID studentId, UUID examPaperId);
 
     @Query("""
         select a.id from StudentExamAttempt a

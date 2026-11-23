@@ -27,5 +27,6 @@ public record AdminResultRowResponse(
         String gradedByName,
         boolean inTeacherClass,
         boolean isAssignedPaper,
-        String relationLabel
+        String relationLabel,
+        Integer attemptNumber
 ) {}

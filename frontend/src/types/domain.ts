@@ -75,6 +75,7 @@ export interface StudentExamDetail {
 
 export interface StartExamAttemptResponse {
   attemptId: string
+  attemptNumber?: number
   paperId?: string
   status?: AttemptStatus | string
   remainingSeconds?: number | null
@@ -128,6 +129,7 @@ export interface AttemptAnswerRecord {
 
 export interface AttemptResultResponse {
   attemptId: string
+  attemptNumber?: number
   paperId: string
   paperTitle?: string
   examCode?: string

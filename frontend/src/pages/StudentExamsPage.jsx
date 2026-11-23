@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   ArrowDown,
@@ -20,7 +20,7 @@ import { formatDateTime } from '@/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { EmptyState, ErrorState, LoadingState, PageHeader } from '@/components/common/StateFeedback'
+import { ConfirmModal, EmptyState, ErrorState, LoadingState, PageHeader } from '@/components/common/StateFeedback'
 import { cn } from '@/lib/utils'
 
 function fmtTen(val) {
@@ -30,7 +30,9 @@ function fmtTen(val) {
 }
 
 export default function StudentExamsPage() {
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
+  const [retakeTarget, setRetakeTarget] = useState(null)
   const subjectIdParam = searchParams.get('subjectId') || ''
   const pageParam = Math.max(0, Number.parseInt(searchParams.get('page') || '0', 10) || 0)
   const sortByParam = searchParams.get('sortBy') || 'publishedAt'
@@ -125,25 +127,46 @@ export default function StudentExamsPage() {
     }
     if (status === 'IN_PROGRESS') {
       return (
-        <Button size="sm" variant="teal" asChild>
-          <Link to={`/hoc-sinh/lam-bai/${exam.paperId}`}>
+        <div className="inline-flex items-center justify-end gap-1.5">
+          <Button size="sm" variant="teal" asChild>
+            <Link to={`/hoc-sinh/lam-bai/${exam.paperId}`}>
+              <Play className="h-3.5 w-3.5" />
+              Tiếp tục
+            </Link>
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setRetakeTarget(exam)}>
             <RotateCcw className="h-3.5 w-3.5" />
-            Tiếp tục
-          </Link>
-        </Button>
+            Làm lại
+          </Button>
+        </div>
       )
     }
     if (status === 'WAITING_GRADING' || status === 'SUBMITTED' || status === 'COMPLETED') {
       return (
-        <Button size="sm" variant="outline" asChild>
-          <Link to={`/hoc-sinh/ket-qua/${exam.attemptId}`}>
-            <Eye className="h-3.5 w-3.5" />
-            {status === 'COMPLETED' ? 'Xem kết quả' : 'Xem trạng thái'}
-          </Link>
-        </Button>
+        <div className="inline-flex items-center justify-end gap-1.5">
+          <Button size="sm" variant="outline" asChild>
+            <Link to={`/hoc-sinh/ket-qua/${exam.attemptId}`}>
+              <Eye className="h-3.5 w-3.5" />
+              {status === 'COMPLETED' ? 'Xem kết quả' : 'Xem trạng thái'}
+            </Link>
+          </Button>
+          <Button size="sm" variant="teal" asChild>
+            <Link to={`/hoc-sinh/lam-bai/${exam.paperId}?forceNew=1`}>
+              <RotateCcw className="h-3.5 w-3.5" />
+              Làm lại
+            </Link>
+          </Button>
+        </div>
       )
     }
-    return <span className="text-xs text-slate-400">Đã hủy</span>
+    return (
+      <Button size="sm" variant="teal" asChild>
+        <Link to={`/hoc-sinh/lam-bai/${exam.paperId}?forceNew=1`}>
+          <RotateCcw className="h-3.5 w-3.5" />
+          Làm lại
+        </Link>
+      </Button>
+    )
   }
 
   return (
@@ -319,8 +342,11 @@ export default function StudentExamsPage() {
                         {!statusMeta ? (
                           <Badge variant="neutral">Chưa làm</Badge>
                         ) : (
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-1.5">
                             <Badge variant={statusMeta.variant || statusMeta.tone}>{statusMeta.label}</Badge>
+                            {exam.attemptNumber && (
+                              <Badge variant="neutral" className="text-[11px]">Lần {exam.attemptNumber}</Badge>
+                            )}
                             {scoreText && (
                               <span className="text-xs font-bold tabular-nums text-teal-700">{scoreText}</span>
                             )}
@@ -366,6 +392,20 @@ export default function StudentExamsPage() {
             </div>
           )}
         </div>
+      )}
+
+      {retakeTarget && (
+        <ConfirmModal
+          title="Làm lại bài thi từ đầu?"
+          message={`Lượt thi đang làm dở của đề "${retakeTarget.title}" (Lần ${retakeTarget.attemptNumber || 1}) sẽ được đánh dấu Đã hủy và hệ thống mở lượt làm mới (Lần ${(retakeTarget.attemptNumber || 1) + 1}).`}
+          confirmText="Làm lại ngay"
+          onCancel={() => setRetakeTarget(null)}
+          onConfirm={() => {
+            const targetId = retakeTarget.paperId
+            setRetakeTarget(null)
+            navigate(`/hoc-sinh/lam-bai/${targetId}?forceNew=1`)
+          }}
+        />
       )}
     </div>
   )

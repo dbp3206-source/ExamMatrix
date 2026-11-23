@@ -29,6 +29,7 @@ interface AdminResultRow {
   paperTitle: string
   examCode: string
   examType: 'OBJECTIVE' | 'ESSAY'
+  attemptNumber?: number
   scoreOnTen: number | null
   rawScore: number | null
   maxScore: number | null
@@ -299,7 +300,7 @@ export default function AdminResultsPage() {
                             {row.className ? `${row.className} (${row.classCode})` : '—'}
                           </td>
                           <td className="px-4 py-3 border-l border-slate-100">
-                            <div className="font-medium text-slate-900">{row.paperTitle}</div>
+                            <div className="font-medium text-slate-900">{row.paperTitle} (Lần {row.attemptNumber || 1})</div>
                             <div className="text-xs text-slate-500">{row.subjectName} · Mã {row.examCode}</div>
                           </td>
                           <td className="px-4 py-3 border-l border-slate-100 text-right font-semibold tabular-nums text-slate-900">
@@ -407,7 +408,7 @@ export default function AdminResultsPage() {
                               {row.className ? `${row.className}` : '—'}
                             </td>
                             <td className="px-4 py-3 border-l border-slate-100">
-                              <div className="font-medium text-slate-900">{row.paperTitle}</div>
+                              <div className="font-medium text-slate-900">{row.paperTitle} (Lần {row.attemptNumber || 1})</div>
                               <div className="text-xs text-slate-500">{row.subjectName} · Mã {row.examCode}</div>
                             </td>
                             <td className="px-4 py-3 border-l border-slate-100">
@@ -491,7 +492,7 @@ export default function AdminResultsPage() {
                     {studentResultsQuery.data.content.map((row) => (
                       <tr key={row.attemptId} className="hover:bg-slate-50/60">
                         <td className="px-4 py-3">
-                          <div className="font-medium text-slate-900">{row.paperTitle}</div>
+                          <div className="font-medium text-slate-900">{row.paperTitle} (Lần {row.attemptNumber || 1})</div>
                           <div className="text-xs text-slate-500">{row.subjectName} · Mã {row.examCode}</div>
                         </td>
                         <td className="px-4 py-3 border-l border-slate-100 text-slate-700">{row.className || '—'}</td>

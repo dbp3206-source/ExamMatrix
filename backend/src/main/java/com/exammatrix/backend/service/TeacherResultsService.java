@@ -136,7 +136,8 @@ public class TeacherResultsService {
                 a.getSubmittedAt(),
                 a.getGradedAt(),
                 a.getGradedBy() != null ? a.getGradedBy().getFullName() : null,
-                relationLabel
+                relationLabel,
+                a.effectiveAttemptNumber()
         );
     }
 

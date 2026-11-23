@@ -58,6 +58,10 @@ public class StudentExamAttempt {
     @JoinColumn(name = "graded_by")
     private User gradedBy;
 
+    @Builder.Default
+    @Column(name = "attempt_number", nullable = false)
+    private Integer attemptNumber = 1;
+
     @CreationTimestamp
     @Column(name = "started_at", updatable = false)
     private LocalDateTime startedAt;
@@ -83,5 +87,9 @@ public class StudentExamAttempt {
     public void addAnswer(StudentAttemptAnswer answer) {
         answers.add(answer);
         answer.setAttempt(this);
+    }
+
+    public int effectiveAttemptNumber() {
+        return attemptNumber != null && attemptNumber > 0 ? attemptNumber : 1;
     }
 }

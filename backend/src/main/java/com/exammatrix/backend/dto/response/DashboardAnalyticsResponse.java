@@ -147,7 +147,8 @@ public class DashboardAnalyticsResponse {
             BigDecimal scoreOnTen,
             LocalDateTime startedAt,
             LocalDateTime submittedAt,
-            LocalDateTime gradedAt
+            LocalDateTime gradedAt,
+            Integer attemptNumber
     ) {}
 
     public record StudentSubjectResult(

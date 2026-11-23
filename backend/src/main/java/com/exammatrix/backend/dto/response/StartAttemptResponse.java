@@ -12,6 +12,7 @@ import java.util.UUID;
 @Builder
 public class StartAttemptResponse {
     private UUID attemptId;
+    private Integer attemptNumber;
     private LocalDateTime startedAt;
     private Integer durationMinutes;
     private Long remainingSeconds;

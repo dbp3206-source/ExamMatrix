@@ -15,6 +15,7 @@ import java.util.UUID;
 @Builder
 public class StudentAttemptResultResponse {
     private UUID attemptId;
+    private Integer attemptNumber;
     private UUID paperId;
     private String examCode;
     private String paperTitle;
