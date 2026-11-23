@@ -206,7 +206,13 @@ export default function ProfilePage() {
                 <Input
                   id="prof-fullname"
                   maxLength={100}
-                  {...profile.register('fullName', { required: 'Họ tên là bắt buộc' })}
+                  {...profile.register('fullName', {
+                    required: 'Họ tên là bắt buộc',
+                    pattern: {
+                      value: /^[\p{L}\s]{2,100}$/u,
+                      message: 'Họ tên chỉ gồm chữ cái tiếng Việt/Latinh và khoảng trắng, không chứa số hoặc ký tự lạ',
+                    },
+                  })}
                 />
                 <FieldError>{profile.formState.errors.fullName?.message}</FieldError>
               </div>

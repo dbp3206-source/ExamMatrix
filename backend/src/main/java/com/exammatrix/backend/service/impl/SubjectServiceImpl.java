@@ -9,6 +9,9 @@ import com.exammatrix.backend.repository.SubjectRepository;
 import com.exammatrix.backend.service.SubjectService;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -31,6 +34,7 @@ public class SubjectServiceImpl implements SubjectService {
     private final EntityManager entityManager;
 
     @Override
+    @Cacheable(value = "subjects", key = "'all'")
     public List<SubjectResponse> getAllSubjects() {
         List<Subject> subjects = subjectRepository.findAll();
 
@@ -45,6 +49,7 @@ public class SubjectServiceImpl implements SubjectService {
     }
 
     @Override
+    @Cacheable(value = "subjects", key = "#id")
     public SubjectResponse getSubjectById(Integer id) {
         Subject subject = findSubjectById(id);
 
@@ -53,6 +58,7 @@ public class SubjectServiceImpl implements SubjectService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "subjects", allEntries = true, beforeInvocation = true)
     public SubjectResponse createNewSubject(SubjectRequest request) {
         String code = request.getCode()
                 .trim()
@@ -80,6 +86,7 @@ public class SubjectServiceImpl implements SubjectService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "subjects", allEntries = true)
     public SubjectResponse updateSubjectById(Integer id, SubjectRequest request) {
         Subject subject = findSubjectById(id);
 
@@ -105,6 +112,10 @@ public class SubjectServiceImpl implements SubjectService {
 
     @Override
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "subjects", allEntries = true),
+            @CacheEvict(value = "chapters", allEntries = true)
+    })
     public void deleteSubjectById(Integer id) {
         Subject subject = findSubjectById(id);
 

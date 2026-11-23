@@ -73,13 +73,15 @@ function UserFormDialog({ onClose }) {
               <Input
                 id="u-username"
                 autoComplete="off"
-                maxLength={50}
-                placeholder="VD: nguyen.van.a"
+                maxLength={30}
+                placeholder="VD: nguyen_van_a"
                 {...register('username', {
                   required: 'Tên đăng nhập là bắt buộc',
+                  minLength: { value: 3, message: 'Tối thiểu 3 ký tự' },
+                  maxLength: { value: 30, message: 'Tối đa 30 ký tự' },
                   pattern: {
-                    value: /^[a-zA-Z0-9._-]+$/,
-                    message: 'Chỉ dùng chữ cái, chữ số, dấu chấm, gạch ngang',
+                    value: /^[a-zA-Z0-9_]{3,30}$/,
+                    message: 'Tên đăng nhập từ 3-30 ký tự, chỉ gồm chữ cái, chữ số và gạch dưới',
                   },
                 })}
               />
@@ -92,7 +94,13 @@ function UserFormDialog({ onClose }) {
                 id="u-fullname"
                 maxLength={100}
                 placeholder="VD: Nguyễn Văn A"
-                {...register('fullName', { required: 'Họ tên là bắt buộc' })}
+                {...register('fullName', {
+                  required: 'Họ tên là bắt buộc',
+                  pattern: {
+                    value: /^[\p{L}\s]{2,100}$/u,
+                    message: 'Họ tên chỉ gồm chữ cái tiếng Việt/Latinh và khoảng trắng, không chứa số hoặc ký tự lạ',
+                  },
+                })}
               />
               <FieldError>{errors.fullName?.message}</FieldError>
             </div>
@@ -311,16 +319,17 @@ export default function UsersPage() {
       {
         accessorKey: 'fullName',
         header: 'Người dùng',
+        meta: { headClassName: 'min-w-[220px]', cellClassName: 'min-w-[220px]' },
         cell: ({ row }) => {
           const item = row.original
           return (
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-800 text-xs font-bold text-white">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-800 text-xs font-bold text-white shadow-xs">
                 {getInitials(item.fullName)}
               </div>
-              <div className="min-w-0">
-                <div className="font-bold text-slate-900">{item.fullName}</div>
-                <div className="text-xs text-slate-500">{item.email}</div>
+              <div className="min-w-0 max-w-[240px]">
+                <div className="truncate font-bold text-slate-900" title={item.fullName}>{item.fullName}</div>
+                <div className="truncate text-xs text-slate-500" title={item.email}>{item.email}</div>
               </div>
             </div>
           )
@@ -329,15 +338,24 @@ export default function UsersPage() {
       {
         accessorKey: 'username',
         header: 'Tên đăng nhập',
-        cell: ({ row }) => <code className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold">{row.original.username}</code>,
+        meta: { headClassName: 'w-[190px]', cellClassName: 'w-[190px]' },
+        cell: ({ row }) => (
+          <code
+            className="inline-block max-w-[170px] truncate rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-800 align-middle"
+            title={row.original.username}
+          >
+            {row.original.username}
+          </code>
+        ),
       },
       {
         accessorKey: 'role',
         header: 'Vai trò',
+        meta: { headClassName: 'w-[130px] whitespace-nowrap', cellClassName: 'w-[130px] whitespace-nowrap' },
         cell: ({ row }) => {
           const r = row.original.role
           return (
-            <Badge variant={isAnyAdminRole(r) ? 'amber' : r === 'TEACHER' ? 'indigo' : 'teal'}>
+            <Badge className="whitespace-nowrap inline-flex items-center" variant={isAnyAdminRole(r) ? 'amber' : r === 'TEACHER' ? 'indigo' : 'teal'}>
               {roleLabel(r)}
             </Badge>
           )
@@ -346,8 +364,9 @@ export default function UsersPage() {
       {
         accessorKey: 'status',
         header: 'Trạng thái',
+        meta: { headClassName: 'w-[140px] whitespace-nowrap', cellClassName: 'w-[140px] whitespace-nowrap' },
         cell: ({ row }) => (
-          <Badge variant={row.original.status === 'ACTIVE' ? 'success' : 'danger'}>
+          <Badge className="whitespace-nowrap inline-flex items-center" variant={row.original.status === 'ACTIVE' ? 'success' : 'danger'}>
             {row.original.status === 'ACTIVE' ? 'Đang hoạt động' : 'Đã khóa'}
           </Badge>
         ),
@@ -355,12 +374,13 @@ export default function UsersPage() {
       {
         accessorKey: 'createdAt',
         header: 'Ngày tạo',
-        cell: ({ row }) => <span className="text-xs text-slate-500">{formatDate(row.original.createdAt)}</span>,
+        meta: { headClassName: 'w-[130px] whitespace-nowrap', cellClassName: 'w-[130px] whitespace-nowrap' },
+        cell: ({ row }) => <span className="text-xs text-slate-500 whitespace-nowrap tabular-nums">{formatDate(row.original.createdAt)}</span>,
       },
       {
         id: 'actions',
         header: 'Thao tác',
-        meta: { headClassName: 'text-right', cellClassName: 'text-right' },
+        meta: { headClassName: 'text-right whitespace-nowrap w-[240px]', cellClassName: 'text-right whitespace-nowrap w-[240px]' },
         cell: ({ row }) => {
           const item = row.original
           if (item.id === user?.id) {
@@ -370,11 +390,12 @@ export default function UsersPage() {
             return <span className="text-xs font-medium text-slate-400">Được bảo vệ</span>
           }
           return (
-            <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
+            <div className="inline-flex items-center justify-end gap-1.5 whitespace-nowrap">
               {item.role === 'STUDENT' && (
                 <Button
                   variant="outline"
                   size="sm"
+                  className="whitespace-nowrap"
                   onClick={() => setWarningTarget(item)}
                 >
                   <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
@@ -385,6 +406,7 @@ export default function UsersPage() {
                 <Button
                   variant="destructive"
                   size="sm"
+                  className="whitespace-nowrap"
                   disabled={statusMutation.isPending}
                   onClick={() => statusMutation.mutate({ id: item.id, status: 'LOCKED' })}
                 >
@@ -395,6 +417,7 @@ export default function UsersPage() {
                 <Button
                   variant="outline"
                   size="sm"
+                  className="whitespace-nowrap"
                   disabled={statusMutation.isPending}
                   onClick={() => statusMutation.mutate({ id: item.id, status: 'ACTIVE' })}
                 >

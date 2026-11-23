@@ -276,7 +276,7 @@ public class UserServiceImpl implements UserService {
             return null;
         }
 
-        return normalized;
+        return com.exammatrix.backend.util.SqlSanitizer.escapeLike(normalized);
     }
 
     private void enforceTargetEditableByCaller(User target) {
