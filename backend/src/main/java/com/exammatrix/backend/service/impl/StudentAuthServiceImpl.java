@@ -88,12 +88,34 @@ public class StudentAuthServiceImpl implements StudentAuthService {
         Role role = roleRepository.findByNameIgnoreCase("STUDENT").orElseThrow(() ->
                 new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Chưa cấu hình vai trò học sinh"));
         String name = identity.getClaimAsString("name");
-        String fullName = name == null || name.isBlank() ? email : name.strip();
-        int nameLength = Math.min(100, fullName.codePointCount(0, fullName.length()));
+        String rawFullName = name == null || name.isBlank() ? email : name.strip();
+        String cleanFullName = rawFullName.replaceAll("[^\\p{L}\\s]", "").replaceAll("\\s+", " ").strip();
+        if (cleanFullName.isBlank()) {
+            cleanFullName = "Học sinh";
+        }
+        int nameLength = Math.min(100, cleanFullName.codePointCount(0, cleanFullName.length()));
+        String finalFullName = cleanFullName.substring(0, cleanFullName.offsetByCodePoints(0, nameLength));
+
+        String emailPrefix = email.contains("@") ? email.substring(0, email.indexOf('@')) : email;
+        String cleanPrefix = emailPrefix.replaceAll("[^a-zA-Z0-9_]", "").toLowerCase(Locale.ROOT);
+        if (cleanPrefix.length() > 20) {
+            cleanPrefix = cleanPrefix.substring(0, 20);
+        }
+        if (cleanPrefix.length() < 3) {
+            cleanPrefix = "student";
+        }
+        String candidateUsername;
+        int attempts = 0;
+        do {
+            String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 6);
+            candidateUsername = cleanPrefix + "_" + suffix;
+            attempts++;
+        } while (userRepository.existsByUsernameIgnoreCase(candidateUsername) && attempts < 10);
+
         User student = User.builder()
-                .username("google_" + UUID.randomUUID().toString().replace("-", ""))
+                .username(candidateUsername)
                 .email(email)
-                .fullName(fullName.substring(0, fullName.offsetByCodePoints(0, nameLength)))
+                .fullName(finalFullName)
                 .password(passwordEncoder.encode(UUID.randomUUID().toString()))
                 .googleSubject(identity.getSubject())
                 .role(role)

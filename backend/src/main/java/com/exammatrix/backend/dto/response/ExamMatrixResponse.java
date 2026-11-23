@@ -3,6 +3,7 @@ package com.exammatrix.backend.dto.response;
 import com.exammatrix.backend.entity.enums.ExamType;
 import lombok.*;
 
+import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -11,7 +12,9 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class ExamMatrixResponse {
+public class ExamMatrixResponse implements Serializable {
+    private static final long serialVersionUID = 1L;
+
     private UUID id;
     private UUID teacherId;
     private Integer subjectId;

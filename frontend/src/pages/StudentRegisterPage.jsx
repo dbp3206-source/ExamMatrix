@@ -296,10 +296,10 @@ export default function StudentRegisterPage() {
                         {...register('username', {
                           required: 'Vui lòng nhập tên đăng nhập',
                           minLength: { value: 3, message: 'Tối thiểu 3 ký tự' },
-                          maxLength: { value: 50, message: 'Tối đa 50 ký tự' },
+                          maxLength: { value: 30, message: 'Tối đa 30 ký tự' },
                           pattern: {
-                            value: /^[a-zA-Z0-9_.-]+$/,
-                            message: 'Chỉ chấp nhận chữ cái, số, dấu gạch dưới, gạch ngang, chấm',
+                            value: /^[a-zA-Z0-9_]{3,30}$/,
+                            message: 'Tên đăng nhập từ 3-30 ký tự, chỉ gồm chữ cái, số và dấu gạch dưới',
                           },
                         })}
                       />
@@ -315,6 +315,10 @@ export default function StudentRegisterPage() {
                         {...register('fullName', {
                           required: 'Vui lòng nhập họ và tên',
                           maxLength: { value: 100, message: 'Tối đa 100 ký tự' },
+                          pattern: {
+                            value: /^[\p{L}\s]{2,100}$/u,
+                            message: 'Họ tên chỉ gồm chữ cái tiếng Việt/Latinh và khoảng trắng, không chứa số hoặc ký tự lạ',
+                          },
                         })}
                       />
                       <FieldError>{errors.fullName?.message}</FieldError>

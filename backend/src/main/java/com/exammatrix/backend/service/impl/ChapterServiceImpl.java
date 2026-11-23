@@ -10,6 +10,8 @@ import com.exammatrix.backend.repository.QuestionRepository;
 import com.exammatrix.backend.repository.SubjectRepository;
 import com.exammatrix.backend.service.ChapterService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
@@ -31,6 +33,7 @@ public class ChapterServiceImpl implements ChapterService {
     private final ExamMatrixConfigRepository examMatrixConfigRepository;
 
     @Override
+    @Cacheable(value = "chapters", key = "#subjectId != null ? #subjectId : 'all'")
     public List<ChapterResponse> getAllChapters(Integer subjectId) {
         Sort sort = Sort.by(
                 Sort.Order.asc("subject.id"),
@@ -53,6 +56,7 @@ public class ChapterServiceImpl implements ChapterService {
     }
 
     @Override
+    @Cacheable(value = "chapters", key = "'detail_' + #id")
     public ChapterResponse getDetailChapter(Integer id) {
         Chapter chapter = findChapterById(id);
 
@@ -61,6 +65,7 @@ public class ChapterServiceImpl implements ChapterService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "chapters", allEntries = true)
     public ChapterResponse createNewChapter(ChapterRequest request) {
         Chapter chapter = new Chapter();
 
@@ -89,6 +94,7 @@ public class ChapterServiceImpl implements ChapterService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "chapters", allEntries = true)
     public ChapterResponse updateChapterById(Integer id, ChapterRequest request) {
         Chapter chapter = findChapterById(id);
 
@@ -124,6 +130,7 @@ public class ChapterServiceImpl implements ChapterService {
 
     @Override
     @Transactional
+    @CacheEvict(value = "chapters", allEntries = true)
     public void deleteChapterById(Integer id) {
         Chapter chapter = findChapterById(id);
 

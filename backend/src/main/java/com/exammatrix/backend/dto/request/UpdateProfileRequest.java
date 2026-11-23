@@ -2,6 +2,7 @@ package com.exammatrix.backend.dto.request;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -14,7 +15,11 @@ import lombok.NoArgsConstructor;
 @Builder
 public class UpdateProfileRequest {
     @NotBlank(message = "Họ tên không được để trống")
-    @Size(max = 100, message = "Họ tên không được vượt quá 100 ký tự")
+    @Size(min = 2, max = 100, message = "Họ tên phải từ 2 đến 100 ký tự")
+    @Pattern(
+        regexp = "^[\\p{L}\\s]+$",
+        message = "Họ tên chỉ chấp nhận chữ cái và khoảng trắng, không chứa số hoặc ký tự lạ"
+    )
     String fullName;
 
     @NotBlank(message = "Email không được để trống")
