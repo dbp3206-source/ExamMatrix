@@ -22,6 +22,7 @@ public class StudentAttemptResultResponse {
     private String subjectName;
     private ExamType examType;
     private AttemptStatus status;
+    private Long remainingSeconds;
     private BigDecimal score;
     private BigDecimal maxScore;
     private BigDecimal scoreOnTen;

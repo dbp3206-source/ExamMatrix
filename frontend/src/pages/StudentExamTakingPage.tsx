@@ -642,50 +642,18 @@ export default function StudentExamTakingPage() {
     if (!attemptId || timerSyncInFlightRef.current || submitInFlightRef.current || !isInProgressAttemptStatus(attemptStatusRef.current)) return
     timerSyncInFlightRef.current = true
     try {
-      const started = (await api.startExamAttempt(
-        paperId as string,
-        forceNew ? { forceNew: true } : undefined
-      )) as StartExamAttemptResponse
-      if (forceNew) {
-        setSearchParams({}, { replace: true })
-      }
-      if (started?.attemptId !== attemptId) throw new Error('Mã lượt làm bài đã thay đổi.')
+      const latest = await syncAttemptStatusFromBackend(attemptId)
       if (submitInFlightRef.current) return
-      const outcome = classifyAttemptStatus(started?.status)
-      if (outcome === 'CANCELLED') {
-        lockAsCancelled(null)
-        return
-      }
+      const outcome = classifyAttemptStatus(latest?.status)
       if (outcome === 'SUBMITTED') {
-        const latestAttempt = await syncAttemptStatusFromBackend(attemptId).catch(() => null)
-        if (isSubmittedAttemptStatus(latestAttempt?.status)) {
-          navigate(`/hoc-sinh/ket-qua/${attemptId}`, { replace: true })
-        }
+        navigate(`/hoc-sinh/ket-qua/${attemptId}`, { replace: true })
         return
       }
-      if (outcome === 'UNKNOWN') {
-        setUnknownStatusNotice(
-          `Máy chủ trả trạng thái lượt thi không xác định (${started?.status || 'trống'}). Vui lòng kiểm tra lại trạng thái.`
-        )
-        return
-      }
+      if (outcome !== 'IN_PROGRESS' || latest?.remainingSeconds == null) return
       const now = performance.now()
-      deadlineRef.current = examDeadline(started.remainingSeconds, now)
+      deadlineRef.current = examDeadline(latest.remainingSeconds, now)
       setTimeLeft(displayedSeconds(deadlineRef.current, now))
     } catch (error) {
-      try {
-        const latestAttempt = await syncAttemptStatusFromBackend(attemptId)
-        const outcome = classifyAttemptStatus(latestAttempt?.status)
-        if (outcome === 'SUBMITTED') {
-          navigate(`/hoc-sinh/ket-qua/${attemptId}`, { replace: true })
-          return
-        }
-        if (outcome === 'CANCELLED') {
-          return
-        }
-      } catch {
-
-      }
       if (isAttemptCancelledError(error)) {
         lockAsCancelled(null)
         return
@@ -694,7 +662,7 @@ export default function StudentExamTakingPage() {
     } finally {
       timerSyncInFlightRef.current = false
     }
-  }, [attemptId, lockAsCancelled, navigate, paperId, syncAttemptStatusFromBackend])
+  }, [attemptId, lockAsCancelled, navigate, syncAttemptStatusFromBackend])
 
   useEffect(() => {
     document.title = 'Đang làm bài | Exam Matrix'

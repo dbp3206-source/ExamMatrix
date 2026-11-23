@@ -805,6 +805,9 @@ export const mockApi = {
       subjectName: subject?.name,
       examType: matrix?.examType,
       status: attempt.status,
+      remainingSeconds: attempt.status === 'IN_PROGRESS'
+        ? Math.max(0, (matrix?.duration || 45) * 60 - Math.floor((Date.now() - Date.parse(attempt.startedAt)) / 1000))
+        : null,
       score: isCompleted ? attempt.score : null,
       maxScore: attempt.maxScore,
       startedAt: attempt.startedAt,

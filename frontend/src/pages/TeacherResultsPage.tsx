@@ -343,7 +343,7 @@ export default function TeacherResultsPage() {
                           </Badge>
                         </td>
                         <td className="px-4 py-3 align-top">
-                          <Badge variant={stMeta.tone as any}>{stMeta.label}</Badge>
+                          <Badge variant={stMeta.tone}>{stMeta.label}</Badge>
                         </td>
                         <td className="px-4 py-3 align-top tabular-nums">
                           {row.status === 'COMPLETED' ? (
@@ -446,7 +446,7 @@ export default function TeacherResultsPage() {
                         <div className="text-sm font-semibold text-slate-900">{d.paperTitle} (Lần {d.attemptNumber || 1})</div>
                         <div className="flex flex-wrap gap-1.5 pt-0.5">
                           <Badge variant={d.examType === 'ESSAY' ? 'warning' : 'indigo'}>{examTypeLabel(d.examType)}</Badge>
-                          <Badge variant={st.tone as any}>{st.label}</Badge>
+                          <Badge variant={st.tone}>{st.label}</Badge>
                         </div>
                       </div>
                       <div className={cn('rounded-lg border p-3 text-center', tone.box)}>

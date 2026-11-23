@@ -13,16 +13,18 @@ services:
       - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database/V1__init_schema.sql:/docker-entrypoint-initdb.d/V1__init_schema.sql:ro
-      - ./database/V2__student_exam_flow.sql:/docker-entrypoint-initdb.d/V2__student_exam_flow.sql:ro
-      - ./database/V3__student_exam_access_and_import.sql:/docker-entrypoint-initdb.d/V3__student_exam_access_and_import.sql:ro
-      - ./database/V5__google_identity_and_sessions.sql:/docker-entrypoint-initdb.d/V5__google_identity_and_sessions.sql:ro
-      - ./database/V6__exam_generation_requests.sql:/docker-entrypoint-initdb.d/V6__exam_generation_requests.sql:ro
-      - ./database/V7__generation_advice_snapshots.sql:/docker-entrypoint-initdb.d/V7__generation_advice_snapshots.sql:ro
-      - ./database/V8__analytics_scoring_and_class_modes.sql:/docker-entrypoint-initdb.d/V8__analytics_scoring_and_class_modes.sql:ro
-      - ./database/V9__feedback_and_multi_class.sql:/docker-entrypoint-initdb.d/V9__feedback_and_multi_class.sql:ro
+      - ./database/V1__init_schema.sql:/docker-entrypoint-initdb.d/01__init_schema.sql:ro
+      - ./database/V2__student_exam_flow.sql:/docker-entrypoint-initdb.d/02__student_exam_flow.sql:ro
+      - ./database/V3__student_exam_access_and_import.sql:/docker-entrypoint-initdb.d/03__student_exam_access_and_import.sql:ro
+      - ./database/V5__google_identity_and_sessions.sql:/docker-entrypoint-initdb.d/05__google_identity_and_sessions.sql:ro
+      - ./database/V6__exam_generation_requests.sql:/docker-entrypoint-initdb.d/06__exam_generation_requests.sql:ro
+      - ./database/V7__generation_advice_snapshots.sql:/docker-entrypoint-initdb.d/07__generation_advice_snapshots.sql:ro
+      - ./database/V8__analytics_scoring_and_class_modes.sql:/docker-entrypoint-initdb.d/08__analytics_scoring_and_class_modes.sql:ro
+      - ./database/V9__feedback_and_multi_class.sql:/docker-entrypoint-initdb.d/09__feedback_and_multi_class.sql:ro
+      - ./database/V10__rbac_otp_and_name_warnings.sql:/docker-entrypoint-initdb.d/10__rbac_otp_and_name_warnings.sql:ro
+      - ./database/V11__allow_multiple_exam_attempts.sql:/docker-entrypoint-initdb.d/11__allow_multiple_exam_attempts.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d exam_matrix"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d exam_matrix"]
       interval: 5s
       timeout: 5s
       retries: 5

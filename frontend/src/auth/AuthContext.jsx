@@ -108,13 +108,14 @@ export function AuthProvider({ children }) {
         refreshingRef.current = true
         try {
           const next = await api.refreshSession()
-          if (next?.accessToken && next?.user) {
+          if (next?.accessToken && next?.user && localStorage.getItem(TOKEN_KEY) === token) {
             localStorage.setItem(TOKEN_KEY, next.accessToken)
             localStorage.setItem(USER_KEY, JSON.stringify(next.user))
             queryClient.setQueryData(['session', next.accessToken], next.user)
             setToken(next.accessToken)
           }
         } catch {
+          // Keep the current session on a transient refresh failure.
         } finally {
           refreshingRef.current = false
         }

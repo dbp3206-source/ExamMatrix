@@ -408,6 +408,12 @@ class StudentOtpSessionAndRankingIntegrationTest {
         String attempt1Id = objectMapper.readTree(firstRes.getResponse().getContentAsString())
                 .get("attemptId").asText();
 
+        mockMvc.perform(get("/student/attempts/" + attempt1Id)
+                .header(HttpHeaders.AUTHORIZATION, studentBearer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.remainingSeconds").isNumber());
+
         MvcResult retakeInProgressRes = mockMvc.perform(post("/student/exams/" + publicPaper.getId() + "/attempts?forceNew=true")
                 .header(HttpHeaders.AUTHORIZATION, studentBearer))
                 .andExpect(status().isCreated())
@@ -424,6 +430,16 @@ class StudentOtpSessionAndRankingIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.attemptNumber").value(2))
                 .andExpect(jsonPath("$.status").value("COMPLETED"));
+
+        mockMvc.perform(get("/student/attempts/" + attempt2Id)
+                .header(HttpHeaders.AUTHORIZATION, studentBearer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.remainingSeconds").doesNotExist());
+        mockMvc.perform(get("/student/exams")
+                .header(HttpHeaders.AUTHORIZATION, studentBearer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].attemptCount").value(2));
 
         MvcResult retakeCompletedRes = mockMvc.perform(post("/student/exams/" + publicPaper.getId() + "/attempts?forceNew=true")
                 .header(HttpHeaders.AUTHORIZATION, studentBearer))

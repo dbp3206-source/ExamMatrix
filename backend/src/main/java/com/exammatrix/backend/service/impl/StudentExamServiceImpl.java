@@ -557,6 +557,10 @@ public class StudentExamServiceImpl implements StudentExamService {
                 .subjectName(matrix.getSubject().getName())
                 .examType(matrix.getExamType())
                 .status(attempt.getStatus())
+                .remainingSeconds(attempt.getStatus() == AttemptStatus.IN_PROGRESS
+                        ? Math.max(0, matrix.getDuration() * 60L
+                                - Duration.between(attempt.getStartedAt(), LocalDateTime.now()).getSeconds())
+                        : null)
                 .score(attempt.getStatus() == AttemptStatus.COMPLETED ? attempt.getScore() : null)
                 .maxScore(attempt.getMaxScore())
                 .scoreOnTen(scoreOnTen)

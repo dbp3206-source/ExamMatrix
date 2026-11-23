@@ -130,6 +130,7 @@ export interface AttemptAnswerRecord {
 export interface AttemptResultResponse {
   attemptId: string
   attemptNumber?: number
+  remainingSeconds?: number | null
   paperId: string
   paperTitle?: string
   examCode?: string

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -49,7 +49,7 @@ export default function StudentExamsPage() {
     setSearchDraft(urlSearch)
   }, [urlSearch])
 
-  const updateParams = (patch, resetPage = false) => {
+  const updateParams = useCallback((patch, resetPage = false) => {
     const next = new URLSearchParams(searchParams)
     Object.entries(patch).forEach(([k, v]) => {
       if (v === '' || v == null) next.delete(k)
@@ -57,7 +57,7 @@ export default function StudentExamsPage() {
     })
     if (resetPage) next.set('page', '0')
     setSearchParams(next, { replace: true })
-  }
+  }, [searchParams, setSearchParams])
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -66,7 +66,7 @@ export default function StudentExamsPage() {
       }
     }, 280)
     return () => clearTimeout(timer)
-  }, [searchDraft])
+  }, [searchDraft, updateParams, urlSearch])
 
   const subjectsQuery = useQuery({
     queryKey: ['student', 'exam-subjects'],
