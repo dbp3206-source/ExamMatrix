@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ErrorState, LoadingState, PageHeader } from '@/components/common/StateFeedback'
+import { MathRenderer } from '@/components/common/MathRenderer'
 
 export default function StudentResultPage() {
   const { attemptId } = useParams<{ attemptId: string }>()
@@ -218,7 +219,7 @@ export default function StudentResultPage() {
                 <div key={ans.questionId || idx} className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <h3 className="text-sm font-bold text-slate-900">
-                      Câu {qOrder}: <span className="font-semibold">{ans.content || 'Nội dung câu hỏi không khả dụng'}</span>
+                      Câu {qOrder}: <span className="font-semibold"><MathRenderer content={ans.content || 'Nội dung câu hỏi không khả dụng'} /></span>
                     </h3>
                     <div className="flex items-center gap-2 shrink-0">
                       <Badge variant="neutral">{typeLabel(ans.type)}</Badge>

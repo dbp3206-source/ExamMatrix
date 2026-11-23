@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useFieldArray, useForm } from 'react-hook-form'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { Check, Download, Eye, FileUp, Pencil, Plus, RotateCcw, Search, Trash2, Upload } from 'lucide-react'
+import { Calculator, Check, Download, Eye, FileUp, Pencil, Plus, RotateCcw, Search, Trash2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { emitAssistantHint } from '@/utils/assistant'
 import { api } from '@/api/service'
@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { MathRenderer } from '@/components/common/MathRenderer'
 import {
   ConfirmModal,
   DifficultyBadge,
@@ -236,6 +237,16 @@ function QuestionFormDialog({ item, subjects, allChapters, onClose }) {
               })}
             />
             <FieldError>{errors.content?.message}</FieldError>
+            {Boolean(contentVal.trim()) && (
+              <div className="mt-2 rounded-lg border border-teal-200/80 bg-teal-50/50 p-2.5 text-xs">
+                <span className="block mb-1 font-bold uppercase tracking-wider text-teal-800 text-[10px]">
+                  Xem trước công thức toán học (KaTeX):
+                </span>
+                <div className="text-slate-900 font-medium">
+                  <MathRenderer content={contentVal} />
+                </div>
+              </div>
+            )}
           </div>
 
           {type === 'ESSAY' ? (
@@ -760,6 +771,7 @@ export default function QuestionsPage() {
   const [editing, setEditing] = useState(null)
   const [deleting, setDeleting] = useState(null)
   const [isImportOpen, setIsImportOpen] = useState(false)
+  const [mathMode, setMathMode] = useState(true)
   const queryClient = useQueryClient()
 
   useEffect(() => {
@@ -909,8 +921,26 @@ export default function QuestionsPage() {
         </div>
       </div>
 
-      <div className="flex items-center justify-between text-xs font-semibold text-slate-600" aria-live="polite">
-        <span className="tabular-nums">{questions.data?.totalElements ?? 0} câu hỏi phù hợp</span>
+      <div className="flex flex-wrap items-center justify-between gap-2.5 text-xs font-semibold text-slate-600" aria-live="polite">
+        <div className="flex items-center gap-3">
+          <span className="tabular-nums">{questions.data?.totalElements ?? 0} câu hỏi phù hợp</span>
+          <Button
+            type="button"
+            variant={mathMode ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setMathMode(!mathMode)}
+            className={cn(
+              'h-7 gap-1.5 px-2.5 text-xs font-medium rounded-lg transition-all',
+              mathMode
+                ? 'bg-teal-700 text-white hover:bg-teal-800 border-teal-700'
+                : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+            )}
+            title={mathMode ? 'Đang bật định dạng công thức toán học (KaTeX). Nhấn để chuyển sang văn bản thô.' : 'Đang tắt định dạng toán học. Nhấn để hiển thị công thức đẹp mắt.'}
+          >
+            <Calculator className="h-3.5 w-3.5" />
+            <span>{mathMode ? 'Định dạng toán: Bật' : 'Định dạng toán: Tắt'}</span>
+          </Button>
+        </div>
         <span className="tabular-nums">Trang {Number(questions.data?.page ?? filters.page) + 1}</span>
       </div>
 
@@ -945,9 +975,9 @@ export default function QuestionsPage() {
                     onClick={() => setSelectedId(item.id)}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <p className="line-clamp-2 text-sm font-semibold text-slate-900 leading-snug">
-                        {item.content}
-                      </p>
+                      <div className="line-clamp-2 text-sm font-semibold text-slate-900 leading-snug">
+                        <MathRenderer content={item.content} enabled={mathMode} />
+                      </div>
                       <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
                         <Button
                           variant="ghost"
@@ -1034,7 +1064,7 @@ export default function QuestionsPage() {
 
                 <CardContent className="space-y-4 p-5">
                   <div className="rounded-xl border border-slate-200 bg-[#F8F7F4] p-4 text-sm font-medium leading-relaxed text-slate-900 whitespace-pre-line">
-                    {selectedItem.content}
+                    <MathRenderer content={selectedItem.content} enabled={mathMode} />
                   </div>
 
                   {selectedItem.type === 'ESSAY' ? (
@@ -1043,7 +1073,7 @@ export default function QuestionsPage() {
                         Đáp án tham khảo & Barem chấm
                       </div>
                       <div className="rounded-xl border border-teal-200 bg-teal-50/60 p-4 text-sm leading-relaxed text-slate-800 whitespace-pre-line">
-                        {selectedItem.referenceAnswer || 'Chưa có đáp án tham khảo.'}
+                        <MathRenderer content={selectedItem.referenceAnswer || 'Chưa có đáp án tham khảo.'} enabled={mathMode} />
                       </div>
                     </div>
                   ) : (
@@ -1064,7 +1094,9 @@ export default function QuestionsPage() {
                           >
                             <div className="flex items-start gap-2">
                               <span className="font-bold text-slate-500">{String.fromCharCode(65 + idx)}.</span>
-                              <span className="whitespace-pre-line">{ans.content}</span>
+                              <span className="whitespace-pre-line flex-1">
+                                <MathRenderer content={ans.content} enabled={mathMode} />
+                              </span>
                             </div>
                             {ans.isCorrect && (
                               <Badge variant="success" className="shrink-0">

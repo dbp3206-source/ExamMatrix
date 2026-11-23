@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { ConfirmModal, EmptyState, ErrorState, FieldError, LoadingState, PageHeader, Pagination } from '@/components/common/StateFeedback'
+import { MathRenderer } from '@/components/common/MathRenderer'
 import { cn } from '@/lib/utils'
 
 export default function TeacherGradingPage() {
@@ -426,7 +427,7 @@ function GradingQuestionCard({ index, question, studentName, onSave, saving, can
     <Card className="border-slate-200">
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2 pb-3">
         <CardTitle className="text-base leading-snug">
-          Câu {index}: <span className="font-semibold">{question.content || 'Nội dung câu hỏi không khả dụng'}</span>
+          Câu {index}: <span className="font-semibold"><MathRenderer content={question.content || 'Nội dung câu hỏi không khả dụng'} /></span>
         </CardTitle>
         <Badge variant="neutral" className="shrink-0 tabular-nums">
           Tối đa: {question.points ?? '—'} điểm
@@ -453,7 +454,7 @@ function GradingQuestionCard({ index, question, studentName, onSave, saving, can
                 Đáp án tham khảo / Barem chấm
               </div>
               <div className="rounded-lg border border-teal-200 bg-teal-50/60 p-3 text-sm text-slate-800 whitespace-pre-line">
-                {question.referenceAnswer || 'Chưa có hướng dẫn chấm.'}
+                <MathRenderer content={question.referenceAnswer || 'Chưa có hướng dẫn chấm.'} />
               </div>
             </div>
 

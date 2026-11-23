@@ -28,6 +28,7 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ConfirmModal, EmptyState, ErrorState, LoadingState, PageHeader, Pagination, SubjectIcon } from '@/components/common/StateFeedback'
+import { MathRenderer } from '@/components/common/MathRenderer'
 import { cn } from '@/lib/utils'
 
 interface PapersLocationState {
@@ -813,7 +814,7 @@ export function PaperDetailPage() {
                     <span className="text-xs text-slate-600"> ({question.points} điểm)</span>
                   )}
                   <strong>:</strong>{' '}
-                  <span className="whitespace-pre-line">{question.content}</span>
+                  <span className="whitespace-pre-line"><MathRenderer content={question.content} /></span>
                 </p>
 
                 <div className="paper-meta no-print mt-1 text-[11px] font-medium text-slate-500">
@@ -824,7 +825,9 @@ export function PaperDetailPage() {
                   mode === 'answer' && (
                     <section className="paper-reference-answer mt-2 rounded-lg border border-slate-300 bg-slate-50 p-3 text-sm">
                       <strong className="block text-xs uppercase tracking-wider mb-1">Hướng dẫn chấm & Đáp án:</strong>
-                      <p className="whitespace-pre-line">{question.referenceAnswer || 'Chưa có đáp án tham khảo.'}</p>
+                      <div className="whitespace-pre-line text-slate-800">
+                        <MathRenderer content={question.referenceAnswer || 'Chưa có đáp án tham khảo.'} />
+                      </div>
                     </section>
                   )
                 ) : (
@@ -836,7 +839,7 @@ export function PaperDetailPage() {
                           key={answer.id}
                           className={cn(isCorrect && 'paper-correct font-bold text-emerald-800')}
                         >
-                          <span className="whitespace-pre-line">{answer.content}</span>
+                          <span className="whitespace-pre-line"><MathRenderer content={answer.content} /></span>
                           {isCorrect && (
                             <span className="paper-key-mark ml-2 inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[11px] font-bold text-emerald-800">
                               <Check className="h-3 w-3 no-print" />

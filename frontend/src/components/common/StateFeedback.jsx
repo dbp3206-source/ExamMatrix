@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   AlertCircle,
   Atom,
@@ -163,19 +164,135 @@ export function ConfirmModal({
   )
 }
 
-export function Pagination({ page, totalPages, onChange }) {
+export function Pagination({ page, totalPages, onChange, className }) {
+  const [jumpPage, setJumpPage] = useState('')
+
   if (!totalPages || totalPages <= 1) return null
+
+  const currentPage = page + 1 // 1-based index for display
+
+  // Calculate page numbers with ellipsis
+  const getPageNumbers = () => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1)
+    }
+
+    if (currentPage <= 4) {
+      return [1, 2, 3, 4, 5, '...', totalPages]
+    }
+
+    if (currentPage >= totalPages - 3) {
+      return [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages]
+    }
+
+    return [1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages]
+  }
+
+  const pages = getPageNumbers()
+
+  const handleJumpSubmit = (e) => {
+    e.preventDefault()
+    const target = parseInt(jumpPage, 10)
+    if (!isNaN(target) && target >= 1 && target <= totalPages) {
+      onChange(target - 1)
+      setJumpPage('')
+    }
+  }
+
   return (
-    <nav className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-xs" aria-label="Phân trang">
-      <Button variant="outline" size="sm" disabled={page <= 0} onClick={() => onChange(page - 1)}>
+    <nav
+      className={cn(
+        'mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-xs',
+        className
+      )}
+      aria-label="Phân trang"
+    >
+      {/* Nút Trang trước */}
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={page <= 0}
+        onClick={() => onChange(page - 1)}
+        className="h-8 gap-1.5 px-3 text-xs font-medium text-slate-700 hover:bg-slate-50"
+      >
         <ChevronLeft className="h-4 w-4" />
-        Trang trước
+        <span className="hidden sm:inline">Trang trước</span>
       </Button>
-      <span className="text-xs font-semibold text-slate-600 tabular-nums">
-        Trang {page + 1} / {totalPages}
-      </span>
-      <Button variant="outline" size="sm" disabled={page >= totalPages - 1} onClick={() => onChange(page + 1)}>
-        Trang sau
+
+      {/* Danh sách các số trang */}
+      <div className="flex items-center gap-1 sm:gap-1.5">
+        <div className="flex items-center gap-1">
+          {pages.map((p, idx) => {
+            if (p === '...') {
+              return (
+                <span
+                  key={`ellipsis-${idx}`}
+                  className="inline-flex h-8 w-6 items-center justify-center text-xs font-bold text-slate-400 select-none"
+                >
+                  ...
+                </span>
+              )
+            }
+
+            const pageNum = Number(p)
+            const isActive = pageNum === currentPage
+
+            return (
+              <Button
+                key={pageNum}
+                type="button"
+                variant={isActive ? 'default' : 'outline'}
+                size="sm"
+                aria-current={isActive ? 'page' : undefined}
+                onClick={() => onChange(pageNum - 1)}
+                className={cn(
+                  'h-8 min-w-[32px] px-2 text-xs font-semibold tabular-nums transition-colors',
+                  isActive
+                    ? 'border-teal-700 bg-teal-700 text-white shadow-xs hover:bg-teal-800'
+                    : 'border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                )}
+              >
+                {pageNum}
+              </Button>
+            )
+          })}
+        </div>
+
+        {/* Ô nhảy nhanh đến trang (khi tổng số trang >= 5) */}
+        {totalPages >= 5 && (
+          <form onSubmit={handleJumpSubmit} className="hidden lg:flex items-center gap-1.5 ml-2 pl-2 border-l border-slate-200">
+            <span className="text-[11px] font-medium text-slate-500 whitespace-nowrap">Đến trang:</span>
+            <input
+              type="number"
+              min={1}
+              max={totalPages}
+              value={jumpPage}
+              onChange={(e) => setJumpPage(e.target.value)}
+              placeholder={`${currentPage}`}
+              className="h-7 w-12 rounded-md border border-slate-200 px-1.5 text-center text-xs font-medium tabular-nums text-slate-800 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+            />
+            <Button
+              type="submit"
+              variant="ghost"
+              size="sm"
+              disabled={!jumpPage}
+              className="h-7 px-2 text-[11px] font-semibold text-teal-700 hover:bg-teal-50"
+            >
+              Đi
+            </Button>
+          </form>
+        )}
+      </div>
+
+      {/* Nút Trang sau */}
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={page >= totalPages - 1}
+        onClick={() => onChange(page + 1)}
+        className="h-8 gap-1.5 px-3 text-xs font-medium text-slate-700 hover:bg-slate-50"
+      >
+        <span className="hidden sm:inline">Trang sau</span>
         <ChevronRight className="h-4 w-4" />
       </Button>
     </nav>

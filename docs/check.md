@@ -248,4 +248,45 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
 *Kết quả:* Từ request thứ 16 trở đi, server lập tức phản hồi mã lỗi `429 Too Many Requests` và chặn mọi yêu cầu tiếp theo trong vòng 60 giây.
 
 ---
+
+## 10. BỔ SUNG TRÊN BRANCH `feature/pagination-math-formatting`: PHÂN TRANG THEO SỐ & ĐỊNH DẠNG TOÁN HỌC
+
+### 10.1. Phân trang chọn trang theo số (Page Numbers & Ellipsis & Quick Jump)
+- **Vấn đề trước đây:** Component `Pagination` cũ trong `StateFeedback.jsx` chỉ có 2 nút "Trang trước", "Trang sau" và dòng chữ "Trang X / Y", người dùng không thể chọn trang theo số hoặc nhảy nhanh đến trang mong muốn.
+- **Giải pháp kỹ thuật mới:**
+  - Nâng cấp `Pagination` trong `StateFeedback.jsx` thành component phân trang đầy đủ tính năng:
+    - Hiển thị danh sách nút số trang: trang hiện tại được highlight nổi bật (`bg-teal-700 text-white font-bold`).
+    - Thuật toán dấu ba chấm thông minh (`...`): tự động rút gọn khi tổng số trang > 7 (ví dụ: `[1, 2, 3, 4, 5, '...', 20]` hoặc `[1, '...', 7, 8, 9, '...', 20]`).
+    - Tích hợp ô nhập nhanh "Đến trang: [ 5 ] [ Đi ]" khi danh mục có từ 5 trang trở lên, cho phép nhảy thẳng đến trang bất kỳ trong 1 click.
+    - Nút "Trang trước" và "Trang sau" có icon `ChevronLeft` / `ChevronRight`, tự động disable ở trang đầu / trang cuối.
+    - Giao diện đáp ứng (Responsive): tương thích hoàn hảo trên cả mobile, tablet và desktop.
+  - **Phạm vi hưởng lợi:** Tất cả các màn hình dùng `Pagination` đều tự động nhận tính năng này (`QuestionsPage`, `PapersPage`, `MatricesPage`, `UsersPage`, `TeacherGradingPage`, `TeacherStudentRequestsPage`).
+
+### 10.2. Hiển thị định dạng toán học (Mathematical Formatting & KaTeX)
+- **Vấn đề trước đây:** Các câu hỏi môn Toán (như trong ảnh đính kèm của người dùng: chuỗi số $\Sigma(n=1..\infty)$, hàm số $f(x) = \cos^2(2x)$, dãy số $u_n = n^\alpha \cdot (e^{1/n^2}-1)$, lũy thừa, phân thức...) hiển thị dưới dạng văn bản thô (raw text), chữ và ký tự dính nhau, rất khó đọc.
+- **Giải pháp kỹ thuật mới:**
+  - Tích hợp thư viện `katex 0.19.1` cùng bộ font toán học KaTeX chuẩn quốc tế.
+  - Xây dựng component `MathRenderer.jsx`:
+    - Hỗ trợ cú pháp LaTeX chuẩn (`$...$`, `$$...$$`, `\(...\)`, `\[...\]`).
+    - Tích hợp bộ chuyển đổi thông minh `convertAsciiMathToLatex`: tự động nhận diện và chuyển đổi các biểu thức toán học nhập dạng text/unicode thông thường (ký hiệu tổng $\Sigma, \sum$, tích phân $\int$, giới hạn $\lim$, số mũ $^2, ^\alpha, ^{n-2}$, phân số $1/(x+1)^2, 3^{n-2}/n!$, hàm lượng giác $\sin, \cos^2(2x)$, ký tự Hy Lạp $\alpha, \beta, \pi, \theta$, v.v.) sang LaTeX để KaTeX render đẹp mắt.
+    - Fallback an toàn: nếu công thức có lỗi cú pháp, tự động giữ nguyên văn bản gốc mà không làm crash UI.
+  - **Nút bật/tắt định dạng toán học:**
+    - Thêm nút công tắc "Định dạng toán: Bật / Tắt" (icon `Calculator`) trên thanh công cụ `QuestionsPage`.
+    - Bật mặc định giúp người dùng lập tức thấy công thức được định dạng chuẩn, đồng thời có thể tắt để xem lại văn bản thô bất cứ lúc nào.
+  - **Xem trước công thức thời gian thực (Live Preview):**
+    - Trong hộp thoại Thêm/Sửa câu hỏi (`QuestionFormDialog`), khi giáo viên nhập đề bài, một khung "Xem trước công thức toán học (KaTeX)" sẽ hiển thị trực tiếp bên dưới để kiểm tra ngay lập tức.
+  - **Đồng bộ toàn diện các màn hình câu hỏi:**
+    - Ngân hàng câu hỏi (`QuestionsPage.jsx`): thẻ câu hỏi danh sách, thẻ xem trước bên phải, barem và các phương án đáp án A, B, C, D.
+    - Màn hình làm bài thi của học sinh (`StudentExamTakingPage.tsx`): đề bài và các lựa chọn đáp án hiển thị công thức rõ ràng.
+    - Màn hình xem lại kết quả thi (`StudentResultPage.tsx`).
+    - Màn hình chi tiết & in ấn đề thi (`PapersPage.tsx`).
+    - Màn hình chấm thi tự luận của giáo viên (`TeacherGradingPage.jsx`).
+
+### 10.3. Kết quả kiểm tra chất lượng (QA Verification)
+- **ESLint:** `pnpm lint` -> `0 errors, 0 warnings`.
+- **Frontend Build:** `pnpm build` (`tsc -b && vite build`) -> Thành công trong 8.84s (bundle `MathRenderer-*.js`, KaTeX fonts và CSS).
+- **Backend Tests:** 9/9 unit & integration tests vượt qua (`BUILD SUCCESS`).
+- **Git Branch:** Toàn bộ mã nguồn mới nằm trên branch riêng biệt `feature/pagination-math-formatting` và **chưa push lên remote** theo đúng chỉ đạo của người dùng.
+
+---
 *Báo cáo được khởi tạo tự động và đã được xác thực qua toàn bộ test suite.*

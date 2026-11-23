@@ -35,6 +35,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
 import { ConfirmModal, EmptyState, ErrorState, LoadingState } from '@/components/common/StateFeedback'
+import { MathRenderer } from '@/components/common/MathRenderer'
 import { cn } from '@/lib/utils'
 
 interface DraftAnswer {
@@ -1137,7 +1138,9 @@ export default function StudentExamTakingPage() {
                   </Alert>
                 )}
 
-                <div className="text-base leading-relaxed text-slate-900 whitespace-pre-line">{question.content}</div>
+                <div className="text-base leading-relaxed text-slate-900 whitespace-pre-line">
+                  <MathRenderer content={question.content} />
+                </div>
 
                 {(question.type === 'SINGLE_CHOICE' || question.type === 'TRUE_FALSE') && (
                   <fieldset className="space-y-2.5" disabled={controlsDisabled}>
@@ -1164,7 +1167,9 @@ export default function StudentExamTakingPage() {
                             className="mt-0.5 h-4 w-4 accent-teal-700"
                           />
                           <span className="font-bold text-slate-500">{String.fromCharCode(65 + answerIndex)}.</span>
-                          <span className="flex-1 whitespace-pre-line">{answer.content}</span>
+                          <span className="flex-1 whitespace-pre-line">
+                            <MathRenderer content={answer.content} />
+                          </span>
                         </label>
                       )
                     })}
@@ -1197,7 +1202,9 @@ export default function StudentExamTakingPage() {
                             className="mt-0.5 h-4 w-4 accent-teal-700"
                           />
                           <span className="font-bold text-slate-500">{String.fromCharCode(65 + answerIndex)}.</span>
-                          <span className="flex-1 whitespace-pre-line">{answer.content}</span>
+                          <span className="flex-1 whitespace-pre-line">
+                            <MathRenderer content={answer.content} />
+                          </span>
                         </label>
                       )
                     })}

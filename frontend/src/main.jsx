@@ -8,6 +8,7 @@ import App from './App'
 import { AuthProvider } from './auth/AuthContext'
 import './index.css'
 import './styles/print.css'
+import 'katex/dist/katex.min.css'
 
 const queryClient = new QueryClient({
   defaultOptions: {
